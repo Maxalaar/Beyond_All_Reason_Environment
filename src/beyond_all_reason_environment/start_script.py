@@ -38,6 +38,11 @@ class MatchConfiguration:
     speed: float = 1000.0
     # Hard stop after this much game time, in case nobody wins.
     maximum_game_minutes: float = 60.0
+    # Save replay.sdfz in the run folder, to watch the match later with scripts/watch_replay.py.
+    record_replay: bool = False
+    # Keep everything the engine writes in the run folder (cache, interface settings...), for debugging.
+    # Otherwise only script.txt, match_result.json, engine_output.log, replay.sdfz and match.png remain.
+    keep_engine_files: bool = False
     extra_mod_options: dict[str, str] = field(default_factory=dict)
 
 
@@ -63,7 +68,7 @@ def build_start_script(configuration: MatchConfiguration) -> str:
         "\tMyPlayerName=observer;",
         "\tStartPosType=1;",  # random start positions, deterministic for a given seed
         "\tGameStartDelay=0;",
-        "\tRecordDemo=0;",
+        f"\tRecordDemo={int(configuration.record_replay)};",
         f"\tFixedRNGSeed={configuration.seed};",
         "\tNumPlayers=1;",
         f"\tNumTeams={len(configuration.players)};",

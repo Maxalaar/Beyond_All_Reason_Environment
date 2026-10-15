@@ -56,6 +56,11 @@ so the environment must match its interface (to confirm).
   with NVIDIA PRIME offload variables + `SDL_VIDEODRIVER=x11` it uses the RTX (x10 reached).
 - Checks: `ruff format`, `ruff check`, `basedpyright --pythonpath <env>/bin/python`, `pytest` (tests/ never start
   the engine). Charts: matplotlib, player colors fixed by position (blue, orange...).
+- Replays: `RecordDemo=1` works headless (engine writes `demos/*.sdfz`, ~30 kB per 3 game minutes).
+  Playback = graphical `spring <file.sdfz>`; the demo replays our `setspeed 1000` debug command, so
+  `replay.py` adds `lua/replay_widgets/replay_speed.lua` to set the speed back at frame 2.
+- After each match `_tidy_run_directory` keeps only script.txt, match_result.json, engine_output.log,
+  replay.sdfz, match.png (unless `keep_engine_files`).
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
   for timeouts) and writes winner + full `Spring.GetTeamStatsHistory` per team (one entry per 15 s, cumulative).
 - Parallel: 4 matches at once run at ≈ x20 each (one alone ≈ x35); the engine uses ~2.3 cores.

@@ -25,6 +25,7 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
 python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
+python scripts/watch_replay.py runs/barb_versus_barb/match_000_seed1 --speed 5   # replay a recorded match
 ```
 
 `run_matches.py` reads a Python file in `configurations/` that defines
@@ -41,7 +42,12 @@ the editor completes and type-checks the fields. Results go to `runs/<name>/`:
 | `plots/outcomes.png` | wins per player, duration of each match |
 | `plots/final_statistics.png` | end-of-match statistics, one dot per match |
 | `match_000_seed1/match.png` | statistics over game time of that match |
-| `match_000_seed1/` | also its start script and engine logs |
+| `match_000_seed1/match_result.json` | winner and full statistics history of that match |
+| `match_000_seed1/replay.sdfz` | replay, when `record_replays=True` (a few hundred kB) |
+| `match_000_seed1/script.txt`, `engine_output.log` | start script and engine logs |
+
+Everything else the engine writes in a match folder (cache, interface settings, about 5 MB) is
+deleted after the match, unless `keep_engine_files=True`.
 
 An existing `runs/<name>/` is never overwritten unless `--overwrite` is given.
 

@@ -26,6 +26,10 @@ def main() -> None:
         default=None,
         help="multiple of real time (default: 1 with --graphical, as fast as possible without)",
     )
+    parser.add_argument("--record-replay", action="store_true", help="save replay.sdfz, see watch_replay.py")
+    parser.add_argument(
+        "--keep-engine-files", action="store_true", help="keep everything the engine writes, for debugging"
+    )
     arguments = parser.parse_args()
 
     configuration = MatchConfiguration(
@@ -36,6 +40,8 @@ def main() -> None:
         map_name=arguments.map,
         seed=arguments.seed,
         maximum_game_minutes=arguments.maximum_game_minutes,
+        record_replay=arguments.record_replay,
+        keep_engine_files=arguments.keep_engine_files,
     )
     if arguments.speed is not None:
         configuration.speed = arguments.speed
@@ -58,6 +64,8 @@ def main() -> None:
     chart = plot_match(result, configuration, result.run_directory / "match.png")
     if chart is not None:
         print(f"Chart: {chart}")
+    if result.replay_path is not None:
+        print(f"Replay: python scripts/watch_replay.py {result.replay_path}")
 
 
 if __name__ == "__main__":

@@ -42,6 +42,10 @@ class BatchConfiguration:
     alternate_sides: bool = False
     maximum_game_minutes: float = 60.0
     map_name: str = DEFAULT_MAP
+    # Save a replay of each match (a few hundred kB each), to watch with scripts/watch_replay.py.
+    record_replays: bool = False
+    # Keep everything the engine writes in each match folder (about 5 MB), for debugging.
+    keep_engine_files: bool = False
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.name):
@@ -66,6 +70,8 @@ class BatchConfiguration:
                     map_name=self.map_name,
                     seed=self.first_seed + index,
                     maximum_game_minutes=self.maximum_game_minutes,
+                    record_replay=self.record_replays,
+                    keep_engine_files=self.keep_engine_files,
                 )
             )
         return configurations
@@ -196,4 +202,7 @@ def save_batch(
         }
         for configuration, result in zip(configurations, results, strict=True)
     ]
-    (batch_directory / "summary.json").write_text(json.dumps({"summary": summary, "matches": matches}, indent=2))
+    # default=str writes paths (replay_path) as text.
+    (batch_directory / "summary.json").write_text(
+        json.dumps({"summary": summary, "matches": matches}, indent=2, default=str)
+    )

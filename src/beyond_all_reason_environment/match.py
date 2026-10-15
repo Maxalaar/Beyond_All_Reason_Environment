@@ -15,8 +15,13 @@ from .start_script import FRAMES_PER_SECOND, MatchConfiguration, build_start_scr
 
 RUNS_DIRECTORY = REPOSITORY_ROOT / "runs"
 LUA_WIDGETS_DIRECTORY = Path(__file__).parent / "lua" / "widgets"
-# Written by lua/widgets/match_result_reporter.lua.
-RESULT_RELATIVE_PATH = Path("LuaUI") / "Config" / "match_result.json"
+# Written there by lua/widgets/match_result_reporter.lua, then moved to the top of the run folder.
+ENGINE_RESULT_PATH = Path("LuaUI") / "Config" / "match_result.json"
+RESULT_FILE_NAME = "match_result.json"
+# The engine records replays into demos/<date>_<map>_<engine>.sdfz; moved to the top of the run folder.
+REPLAY_FILE_NAME = "replay.sdfz"
+# Everything else the engine writes in the run folder is deleted after the match, unless keep_engine_files.
+KEPT_FILE_NAMES = {"script.txt", "engine_output.log", RESULT_FILE_NAME, REPLAY_FILE_NAME, "match.png"}
 
 
 @dataclass
@@ -34,6 +39,7 @@ class MatchResult:
     # One list per player: engine statistics every 16 seconds of game time, cumulative values,
     # with "time" in seconds. Used by plots.py.
     team_history: list[list[dict]] = field(default_factory=list, repr=False)
+    replay_path: Path | None = None
 
     @property
     def game_minutes(self) -> float | None:
@@ -83,6 +89,40 @@ def graphics_library_path() -> str:
     return f"{path}:{SYSTEM_OPENGL_LIBRARY_DIRECTORY}"
 
 
+def graphical_environment(write_directory: Path) -> dict[str, str]:
+    """Environment and window settings for the graphical engine binary, writing into ``write_directory``."""
+    (write_directory / "springsettings.cfg").write_text(
+        "".join(f"{key} = {value}\n" for key, value in GRAPHICAL_SETTINGS.items())
+    )
+    environment = {
+        **os.environ,
+        "SPRING_DATADIR": str(GAME_DATA_DIRECTORY),
+        "LD_LIBRARY_PATH": ":".join(filter(None, [graphics_library_path(), os.environ.get("LD_LIBRARY_PATH")])),
+    }
+    if shutil.which("nvidia-smi") is not None:
+        environment.update(NVIDIA_OFFLOAD_ENVIRONMENT)
+    return environment
+
+
+def _tidy_run_directory(run_directory: Path, keep_engine_files: bool) -> None:
+    """Move the result and the replay to the top of the run folder, then delete the engine's other files."""
+    engine_result = run_directory / ENGINE_RESULT_PATH
+    if engine_result.exists():
+        shutil.move(engine_result, run_directory / RESULT_FILE_NAME)
+    replays = sorted((run_directory / "demos").glob("*.sdfz"))
+    if replays:
+        shutil.move(replays[-1], run_directory / REPLAY_FILE_NAME)
+    if keep_engine_files:
+        return
+    for path in run_directory.iterdir():
+        if path.name in KEPT_FILE_NAMES:
+            continue
+        if path.is_dir():
+            shutil.rmtree(path)
+        else:
+            path.unlink()
+
+
 def run_match(
     configuration: MatchConfiguration,
     run_directory: Path | None = None,
@@ -107,16 +147,10 @@ def run_match(
     script_path.write_text(build_start_script(configuration))
 
     # The run folder is the write directory (logs, results); the shared game_data folder is read-only.
-    environment = {**os.environ, "SPRING_DATADIR": str(GAME_DATA_DIRECTORY)}
     if graphical:
-        (run_directory / "springsettings.cfg").write_text(
-            "".join(f"{key} = {value}\n" for key, value in GRAPHICAL_SETTINGS.items())
-        )
-        environment["LD_LIBRARY_PATH"] = ":".join(
-            filter(None, [graphics_library_path(), os.environ.get("LD_LIBRARY_PATH")])
-        )
-        if shutil.which("nvidia-smi") is not None:
-            environment.update(NVIDIA_OFFLOAD_ENVIRONMENT)
+        environment = graphical_environment(run_directory)
+    else:
+        environment = {**os.environ, "SPRING_DATADIR": str(GAME_DATA_DIRECTORY)}
     start_time = time.monotonic()
     with open(run_directory / "engine_output.log", "w") as log_file:
         subprocess.run(
@@ -128,10 +162,13 @@ def run_match(
             check=False,
         )
     wall_clock_seconds = time.monotonic() - start_time
+    _tidy_run_directory(run_directory, configuration.keep_engine_files)
+    replay_path = run_directory / REPLAY_FILE_NAME
+    replay = replay_path if replay_path.exists() else None
 
-    result_path = run_directory / RESULT_RELATIVE_PATH
+    result_path = run_directory / RESULT_FILE_NAME
     if not result_path.exists():
-        return MatchResult("crash", None, None, wall_clock_seconds, run_directory)
+        return MatchResult("crash", None, None, wall_clock_seconds, run_directory, replay_path=replay)
     result = json.loads(result_path.read_text())
 
     # Each player has its own team and ally team, both numbered like the players.
@@ -149,5 +186,5 @@ def run_match(
     else:
         outcome, winner = "draw", None
     return MatchResult(
-        outcome, winner, result["frame"], wall_clock_seconds, run_directory, team_statistics, team_history
+        outcome, winner, result["frame"], wall_clock_seconds, run_directory, team_statistics, team_history, replay
     )

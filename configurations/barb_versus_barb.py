@@ -14,6 +14,8 @@ configuration = BatchConfiguration(
     alternate_sides=True,
     maximum_game_minutes=60,
     map_name="Red Comet Remake 1.8",
+    record_replays=True,
+    keep_engine_files=False,
     players=[
         ArtificialIntelligencePlayer(short_name="BARb", version="stable", side="Armada"),
         ArtificialIntelligencePlayer(short_name="BARb", version="stable", side="Cortex"),

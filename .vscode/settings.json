@@ -43,5 +43,6 @@
         "game_data": true,
         "reference": true,
         "runs": true
-    }
+    },
+    "python.analysis.typeCheckingMode": "off"
 }
