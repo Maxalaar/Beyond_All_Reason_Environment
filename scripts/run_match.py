@@ -1,6 +1,8 @@
-"""Run one headless match between two built-in artificial intelligences and print the winner.
+"""Run one match between two built-in artificial intelligences and print the winner.
 
-Example: python scripts/run_match.py --seed 3
+Examples:
+    python scripts/run_match.py --seed 3
+    python scripts/run_match.py --graphical --speed 3   # watch it; + and - change the speed in game
 """
 
 import argparse
@@ -16,6 +18,11 @@ def main() -> None:
     parser.add_argument("--first", default="BARb", help="short name of the first artificial intelligence")
     parser.add_argument("--second", default="BARb", help="short name of the second artificial intelligence")
     parser.add_argument("--maximum-game-minutes", type=float, default=60.0)
+    parser.add_argument("--graphical", action="store_true", help="open a window to watch the match")
+    parser.add_argument(
+        "--speed", type=float, default=None,
+        help="multiple of real time (default: 1 with --graphical, as fast as possible without)",
+    )
     arguments = parser.parse_args()
 
     configuration = MatchConfiguration(
@@ -27,7 +34,11 @@ def main() -> None:
         seed=arguments.seed,
         maximum_game_minutes=arguments.maximum_game_minutes,
     )
-    result = run_match(configuration)
+    if arguments.speed is not None:
+        configuration.speed = arguments.speed
+    elif arguments.graphical:
+        configuration.speed = 1.0
+    result = run_match(configuration, graphical=arguments.graphical)
 
     if result.game_frames is None:
         print(f"No result (timeout or crash). Logs: {result.run_directory / 'engine_output.log'}")

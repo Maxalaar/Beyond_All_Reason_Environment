@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from .installation import DEFAULT_MAP, GAME_VERSION
 
 FRAMES_PER_SECOND = 30
+MAXIMUM_ENGINE_SPEED = 1000.0
 
 
 @dataclass
@@ -27,8 +28,8 @@ class MatchConfiguration:
     map_name: str = DEFAULT_MAP
     game_version: str = GAME_VERSION
     seed: int = 1
-    # The engine runs as fast as the processor allows, up to this multiple of real time.
-    maximum_speed: float = 1000.0
+    # Multiple of real time. Without graphics, a high value means "as fast as the processor allows".
+    speed: float = 1000.0
     # Hard stop after this much game time, in case nobody wins.
     maximum_game_minutes: float = 60.0
     extra_mod_options: dict[str, str] = field(default_factory=dict)
@@ -38,11 +39,10 @@ def build_start_script(configuration: MatchConfiguration) -> str:
     """One spectator hosts the match; each artificial intelligence gets its own team and ally team."""
     maximum_frames = int(configuration.maximum_game_minutes * 60 * FRAMES_PER_SECOND)
     # debugcommands is read by the game's cmd_dev_helpers gadget: "frame:command|frame:command".
-    # MaxSpeed/MinSpeed only lift the limit; setspeed actually applies it.
+    # MaxSpeed only lifts the engine limit (20 by default); setspeed actually applies the speed.
     mod_options = {
-        "MinSpeed": f"{configuration.maximum_speed:g}",
-        "MaxSpeed": f"{configuration.maximum_speed:g}",
-        "debugcommands": f"1:setspeed {configuration.maximum_speed:g}|{maximum_frames}:quitforce",
+        "MaxSpeed": f"{MAXIMUM_ENGINE_SPEED:g}",
+        "debugcommands": f"1:setspeed {configuration.speed:g}|{maximum_frames}:quitforce",
         **configuration.extra_mod_options,
     }
 

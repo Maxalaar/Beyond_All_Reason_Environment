@@ -21,6 +21,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 GAME_DATA_DIRECTORY = REPOSITORY_ROOT / "game_data"
 ENGINE_DIRECTORY = GAME_DATA_DIRECTORY / "engine" / f"recoil_{ENGINE_VERSION}"
 HEADLESS_EXECUTABLE = ENGINE_DIRECTORY / "spring-headless"
+GRAPHICAL_EXECUTABLE = ENGINE_DIRECTORY / "spring"
 
 ENGINE_URL = (
     "https://github.com/beyond-all-reason/RecoilEngine/releases/download/"

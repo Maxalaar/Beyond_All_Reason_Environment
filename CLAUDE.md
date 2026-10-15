@@ -45,6 +45,9 @@ so the environment must match its interface (to confirm).
   Measured ≈ x30–45 per match on this machine, ~4.7 GB RAM per match.
 - Our Lua user widgets are copied to `runs/<name>/LuaUI/Widgets/`. User widgets may only write
   in `LuaUI/Config/` or `LuaUI/Widgets/` (`checkUserWritePath` in `luaui/barwidgets.lua`).
+- Graphical mode (`--graphical`, binary `spring`): needs SDL2/X11/OpenAL from `flake.nix`
+  (`BEYOND_ALL_REASON_GRAPHICS_LIBRARY_PATH`). Default renderer is the Intel iGPU (≈ x5 max);
+  with NVIDIA PRIME offload variables + `SDL_VIDEODRIVER=x11` it uses the RTX (x10 reached).
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver`.
 - BARb vs BARb is NOT reproducible with the same `FixedRNGSeed` (55, 33, 46 min, timeout).
   Probably BARb itself (threads/timing); to investigate before relying on seeds.
