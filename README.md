@@ -8,14 +8,16 @@ game [Beyond All Reason](https://www.beyondallreason.info/).
 Any Python ≥ 3.11 environment works, for example a conda environment:
 
 ```bash
-conda create -n BeyondAllReasonReinforcementLearning python=3.13
-conda activate BeyondAllReasonReinforcementLearning
+conda create -n Beyond_All_Reason_Reinforcement_Learning python=3.13   # same name as the folder
+conda activate Beyond_All_Reason_Reinforcement_Learning
 pip install -e .                      # editable: code changes apply without reinstalling
 python scripts/download_game_data.py  # engine + game + map into game_data/ (~2 GB)
 ```
 
 No `nix develop` needed: on NixOS the libraries of the graphical engine are built by Nix
 from `flake.nix` the first time a window is opened. `nix develop` still works if preferred.
+
+`.vscode/settings.json` makes VSCodium use this environment by default.
 
 ## Usage
 

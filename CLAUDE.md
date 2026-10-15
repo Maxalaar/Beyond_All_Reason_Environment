@@ -13,7 +13,8 @@ so the environment must match its interface (to confirm).
 ## Machine
 - NixOS 25.11, 20 CPU cores, 31 GiB RAM, NVIDIA RTX 5070 Laptop (8 GiB VRAM), Python 3.13.
 - No docker, gcc or cmake installed globally. The user works in conda environments
-  (`/media/SSD_1To/conda/envs/`); the package is `pip install -e .` there, no `nix develop` needed:
+  (`/media/SSD_1To/conda/envs/`); this project's is `Beyond_All_Reason_Reinforcement_Learning`
+  (Python 3.13, set as VSCodium default in `.vscode/settings.json`); the package is `pip install -e .` there, no `nix develop` needed:
   `match.py` builds `flake.nix#graphics-libraries` on demand for graphical matches.
 - nix-ld is enabled system-wide, so the prebuilt engine binaries run as is.
 
