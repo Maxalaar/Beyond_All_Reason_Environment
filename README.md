@@ -77,6 +77,30 @@ Earlier versions are never modified: a new run of the same configuration goes to
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.
 
+## Micro environment (reinforcement learning)
+
+`MicroEnvironment` is a small fight between two groups of units, one agent per unit of team 0, with the
+parallel interface of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces.
+Settings: `MicroScenarioConfiguration` (units of each side, opponent behaviour, episode length, decision
+interval, number of entities seen, commands allowed per unit type, rewards).
+
+```bash
+python scripts/try_micro_environment.py --policy attack --episodes 5            # check and measure speed
+python scripts/try_micro_environment.py --policy random --opponent hold_and_fire
+python scripts/try_micro_environment.py --policy attack --graphical --speed 2   # watch it
+```
+
+- **Observation** of each agent: its own unit (`self`) and the `maximum_entities_seen` nearest units
+  (`entities`, with `entity_mask`), positions as fractions of the map plus scale features (map size, distance
+  covered per decision, weapon and sight ranges as fractions of the map), and `command_mask`.
+- **Action**: `{"command": index in COMMANDS, "target": [x, z]}` with `(x, z)` a point of the map in `[0, 1]²`;
+  commands: continue, move, fight (attack-move), attack (the enemy nearest to the point), stop.
+- **How it runs**: one engine process; episodes reset inside the match. A small game extension adds a widget,
+  which exchanges observations and actions with Python over a socket while the simulation waits, and a gadget,
+  which spawns the units and gives the orders. Actions take effect about one decision later (32 frames, a little
+  more when the engine server runs ahead); each observation shows the order the unit is executing.
+- About 160 steps per second with 5 against 5 (one step is one decision of every agent, about 1 game second).
+
 ## Analysis
 
 Each batch also writes Parquet tables in `runs/<name>/version_<n>/tables/`:

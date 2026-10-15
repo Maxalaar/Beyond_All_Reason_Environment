@@ -126,19 +126,14 @@ def _tidy_run_directory(run_directory: Path, keep_engine_files: bool) -> None:
             path.unlink()
 
 
-def run_match(
-    configuration: MatchConfiguration,
-    run_directory: Path | None = None,
-    graphical: bool = False,
-) -> MatchResult:
-    """Run a match to the end. With ``graphical=True`` a window shows it, at ``configuration.speed``."""
+def start_engine(configuration: MatchConfiguration, run_directory: Path, graphical: bool = False) -> subprocess.Popen:
+    """Prepare ``run_directory`` (widgets, start script) and start the engine on it without waiting.
+
+    The engine output goes to engine_output.log in the run folder.
+    """
     executable = GRAPHICAL_EXECUTABLE if graphical else HEADLESS_EXECUTABLE
     if not executable.exists():
         raise FileNotFoundError("Engine missing: run scripts/download_game_data.py first.")
-
-    if run_directory is None:
-        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        run_directory = RUNS_DIRECTORY / f"{timestamp}_seed{configuration.seed}"
     run_directory.mkdir(parents=True, exist_ok=True)
 
     widgets_directory = run_directory / "LuaUI" / "Widgets"
@@ -154,16 +149,28 @@ def run_match(
         environment = graphical_environment(run_directory)
     else:
         environment = {**os.environ, "SPRING_DATADIR": str(GAME_DATA_DIRECTORY)}
-    start_time = time.monotonic()
     with open(run_directory / "engine_output.log", "w") as log_file:
-        subprocess.run(
+        # The child process keeps its own handle on the log file.
+        return subprocess.Popen(
             [str(executable), "--isolation", "--write-dir", str(run_directory), str(script_path)],
             cwd=run_directory,
             env=environment,
             stdout=log_file,
             stderr=subprocess.STDOUT,
-            check=False,
         )
+
+
+def run_match(
+    configuration: MatchConfiguration,
+    run_directory: Path | None = None,
+    graphical: bool = False,
+) -> MatchResult:
+    """Run a match to the end. With ``graphical=True`` a window shows it, at ``configuration.speed``."""
+    if run_directory is None:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        run_directory = RUNS_DIRECTORY / f"{timestamp}_seed{configuration.seed}"
+    start_time = time.monotonic()
+    start_engine(configuration, run_directory, graphical).wait()
     wall_clock_seconds = time.monotonic() - start_time
     _tidy_run_directory(run_directory, configuration.keep_engine_files)
     return read_match_result(run_directory, len(configuration.players), wall_clock_seconds)

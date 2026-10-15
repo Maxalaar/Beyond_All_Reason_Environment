@@ -34,12 +34,50 @@ so the environment must match its interface (to confirm).
       `--graphical` to watch), `scripts/run_matches.py configurations/<file>.py`
       (Python file defining `configuration = BatchConfiguration(...)`; parallel batch, statistics and
       charts into `runs/<name>/`; `batch.py`, `plots.py`).
-- [ ] Step 1: Lua widget/gadget dumps game state (units: pos, hp, team; team
-      resources) to JSON every N frames.
-- [ ] Step 2: 2D viewer (top-down map, team colours, time slider, resource curves).
-- [ ] Step 3: BridgeAI + Python socket, synchronous step().
-- [ ] Step 4: Gymnasium/PettingZoo environment on a small SMAC-like micro scenario.
-- [ ] Step 5: train with the user's reinforcement learning library; evaluation league vs BARb/STAI.
+- [ ] Micro environment (5 v 5), agreed design below. Phase 0: game extension + Lua <-> Python socket +
+      synchronous step(), measure speed [done]; phase 1: scenario gadget [done]; phase 2: Python environment
+      (no RLlib) [done: MicroEnvironment];
+      phase 3: RLlib adapter in Maxalaar_Reinforcement_Learning; phase 4: several arenas per engine process.
+- [ ] Later: 2D viewer, evaluation league vs BARb/STAI, hierarchical agents (group "captain" agents).
+
+## Micro environment design (agreed with the user, 2026-10-15)
+- One agent per unit, shared policy (like the user's Cubeball setup in RLlib). Not a centralized model.
+- Observation per unit: tokens of the N nearest entities (N = `maximum_entities_seen`, configurable) + the
+  unit's own token. Network (in the user's RLlib layer): M learned query vectors per unit type, attention over
+  the N entity tokens (linear cost), concatenation, MLP.
+- Positions are fractions of the map in [0, 1] (absolute, plus relative to the unit). The unit's own token
+  gives the scale, unbounded: map size, map aspect ratio, distance covered per decision, weapon and sight
+  ranges, all as fractions of the map.
+- Action = (verb, x, y): verb among the commands allowed for the unit type (set in the environment
+  configuration, masked): continue, move, fight (attack-move), attack, stop to start; (x, y) in [0, 1]^2 is
+  a point of the map, (0, 0) one corner, (1, 1) the opposite one (minimap-like click). `attack` targets the
+  enemy nearest to the click within a snap radius, otherwise it is ignored. The user rejected per-enemy
+  actions and softmax pointers over entities (do not reintroduce them).
+- Scenario: 5 v 5 Pawns (armpw) mirror, opponent does not move (first passive, then hold position and fire),
+  episode ends when a side is eliminated or after a time limit; reset inside the match (no engine reload).
+- Architecture: LuaSocket only exists in LuaUI and BAR removes it from user widgets, so our Lua is shipped as
+  a small game extension (archive depending on the pinned BAR). A widget talks to Python (TCP, blocking in
+  GameFrame = synchronous step) and reads unit states; a synced gadget spawns, resets and gives orders,
+  receiving actions from the widget through Spring.SendLuaRulesMsg.
+
+## Micro environment, how it works (learned while building it, 2026-10-16)
+- Code: micro_configuration.py, micro_environment.py, game_extension.py, lua/game_extension/ (gadget
+  reinforcement_learning_scenario.lua, widget reinforcement_learning_bridge.lua), scripts/try_micro_environment.py,
+  tests/test_micro_environment.py (`pytest -m engine` for the end-to-end test).
+- The game extension (archive "Beyond All Reason Reinforcement Learning 1", depends on the pinned BAR) is written
+  into <run>/games/ and is the GameType; its widget keeps LuaSocket (BAR only sandboxes user widgets).
+- Every unsynced -> synced message (LuaRulesMsg, AI commands too) goes through the server, which simulates ahead of
+  the blocked client by about speed x block time, capped near 30 frames but up to ~60 at high speed. Pausing +
+  `singlestep` gives exact frames but the engine freezes CommandAI while paused (units ignore orders): unusable.
+  Solution in place: actions carry their decision frame, the gadget applies them at decision + action delay (32)
+  or at once when late, publishes reinforcement_learning_applied_decision, and the widget observes only after it.
+  Measured at speed 1000: ~160 steps/s, decisions every 32-40 frames (exact at speed <= 80, half the speed).
+  The user refused to recompile the engine.
+- Both teams are NullAI 0.1 (does nothing); BAR commanders are destroyed at the first reset; deathmode=neverend.
+  Full vision (Spring.SetGlobalLos) is needed: the engine drops attacks on units the team does not see.
+- Gotchas: Spring.GetGameRulesParam returns no value at all (not nil) for an absent parameter; destroyed units stay
+  listed until the next frame (filter with Spring.GetUnitIsDead); BAR's cmd_paused_is_paused gadget blocks orders
+  while paused unless modoption allowpausegameplay=1; within a frame, gadgets' GameFrame runs before widgets'.
 
 ## How the engine is driven (learned in step 0)
 - Versions pinned in `src/beyond_all_reason_environment/installation.py` (engine = the one the

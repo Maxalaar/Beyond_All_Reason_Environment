@@ -21,7 +21,7 @@
 
     // Lua widgets run inside the game, which provides these globals.
     "Lua.runtime.version": "Lua 5.1",
-    "Lua.diagnostics.globals": ["widget", "gadget", "Spring", "Json", "Platform", "VFS", "WG", "GG"],
+    "Lua.diagnostics.globals": ["widget", "gadget", "gadgetHandler", "widgetHandler", "Spring", "Json", "Platform", "VFS", "WG", "GG", "CMD", "Game", "UnitDefs", "UnitDefNames", "socket"],
 
     "python.testing.pytestEnabled": true,
     "python.testing.pytestArgs": ["tests"],
