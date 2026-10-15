@@ -12,9 +12,8 @@ so the environment must match its interface (to confirm).
 
 ## Machine
 - NixOS 25.11, 20 CPU cores, 31 GiB RAM, NVIDIA RTX 5070 Laptop (8 GiB VRAM), Python 3.13.
-- No docker, gcc or cmake installed globally → use a Nix flake / `nix develop` shell.
-- Prebuilt Linux binaries (Recoil engine) need an FHS environment on NixOS
-  (`buildFHSEnv`, `steam-run` or `nix-ld`).
+- No docker, gcc or cmake installed globally → everything goes through `flake.nix` (`nix develop`).
+- nix-ld is enabled system-wide, so the prebuilt engine binaries run as is.
 
 ## Key technical choices (agreed so far)
 - Run the game without rendering via `spring-headless` (Recoil engine), launched from
@@ -28,14 +27,30 @@ so the environment must match its interface (to confirm).
 - Later: imitation pre-training on Beyond All Reason's public replays (.sdfz), AlphaStar-style.
 
 ## Roadmap (start small)
-- [ ] Step 0: download Recoil + Beyond All Reason + a small map, run BARb vs BARb headless,
-      `run_match.py` returns the winner.
+- [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (BARb vs BARb headless → winner).
 - [ ] Step 1: Lua widget/gadget dumps game state (units: pos, hp, team; team
       resources) to JSON every N frames.
 - [ ] Step 2: 2D viewer (top-down map, team colours, time slider, resource curves).
 - [ ] Step 3: BridgeAI + Python socket, synchronous step().
 - [ ] Step 4: Gymnasium/PettingZoo environment on a small SMAC-like micro scenario.
 - [ ] Step 5: train with the user's reinforcement learning library; evaluation league vs BARb/STAI.
+
+## How the engine is driven (learned in step 0)
+- Versions pinned in `src/beyond_all_reason_environment/installation.py` (engine = the one the
+  official launcher uses, see BYAR-Chobby `dist_cfg/config.json`).
+- `game_data/` is shared read-only through `SPRING_DATADIR`; each match gets its own write dir
+  `runs/<name>/` (`--isolation --write-dir`), so matches can run in parallel.
+- Speed: `MinSpeed`/`MaxSpeed` must be in `[MODOPTIONS]` (engine default max is 20), plus
+  `debugcommands=1:setspeed 1000` (executed by the game's `cmd_dev_helpers.lua` gadget).
+  Measured ≈ x30–45 per match on this machine, ~4.7 GB RAM per match.
+- Our Lua user widgets are copied to `runs/<name>/LuaUI/Widgets/`. User widgets may only write
+  in `LuaUI/Config/` or `LuaUI/Widgets/` (`checkUserWritePath` in `luaui/barwidgets.lua`).
+- The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver`.
+- BARb vs BARb is NOT reproducible with the same `FixedRNGSeed` (55, 33, 46 min, timeout).
+  Probably BARb itself (threads/timing); to investigate before relying on seeds.
+- The game repository has its own headless test tooling: `tools/headless_testing/` and
+  `luaui/Tests/` (in `reference/Beyond-All-Reason`, a read-only clone; `reference/RecoilEngine`
+  is the engine source at the pinned tag).
 
 ## Open questions
 - Which interface does the user's reinforcement learning library expect

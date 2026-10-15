@@ -1,0 +1,16 @@
+[project]
+name = "beyond-all-reason-environment"
+version = "0.1.0"
+description = "Headless test harness and reinforcement learning environment for Beyond All Reason"
+requires-python = ">=3.11"
+dependencies = []
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+beyond_all_reason_environment = ["lua/**/*.lua"]

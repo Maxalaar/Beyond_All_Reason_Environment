@@ -1,0 +1,11 @@
+# Downloaded engine, game and maps (several GB, re-created by scripts/download_game_data.py)
+game_data/
+# Read-only clones of upstream repositories, used as documentation
+reference/
+# One folder per launched match: logs, start script, results
+runs/
+
+__pycache__/
+*.egg-info/
+.venv/
+result
