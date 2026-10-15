@@ -197,10 +197,12 @@ METRICS = [
 ]
 METRICS_BY_NAME = {metric.name: metric for metric in METRICS}
 
-# The six charts of a match overview.
-MATCH_OVERVIEW = ["metal_income", "metal_produced_share", "units_alive", "damage_dealt", "units_killed", "units_lost"]
-# The four time series of a batch overview, next to the outcomes and durations.
-BATCH_OVERVIEW = ["metal_income", "metal_produced_share", "units_alive", "units_killed"]
+# The most important metrics: the top row of every overview, in this order.
+KEY_METRICS = ["metal_income", "energy_income", "units_alive"]
+# Match overview: the key metrics, then three more.
+MATCH_OVERVIEW = [*KEY_METRICS, "metal_produced_share", "damage_dealt", "units_killed"]
+# Batch overview: the key metrics, then the outcomes, durations and this one.
+BATCH_OVERVIEW = [*KEY_METRICS, "metal_produced_share"]
 
 # Final statistic -> (file name, title)
 STATISTIC_NAMES = {
@@ -536,7 +538,8 @@ def plot_batch(
         )
     paths.append(_save_single(directory / "over_time" / "matches_running.png", _draw_matches_running(timeline)))
 
-    overview = [_draw_wins(configurations, results), _draw_durations(results)]
-    overview += [_draw_batch_metric(METRICS_BY_NAME[name], timeline, reference) for name in BATCH_OVERVIEW]
-    paths.append(_save_overview(directory / "overview.png", overview, band, legend_index=2))
+    metric_draws = [_draw_batch_metric(METRICS_BY_NAME[name], timeline, reference) for name in BATCH_OVERVIEW]
+    overview = [*metric_draws[: len(KEY_METRICS)], _draw_wins(configurations, results), _draw_durations(results)]
+    overview += metric_draws[len(KEY_METRICS) :]
+    paths.append(_save_overview(directory / "overview.png", overview, band))
     return paths

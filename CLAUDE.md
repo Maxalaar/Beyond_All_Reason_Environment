@@ -63,6 +63,7 @@ so the environment must match its interface (to confirm).
   replay.sdfz, charts/ (unless `keep_engine_files`). Batch layout: runs/<name>/{charts,matches/<match>}.
 - Charts (`plots.py`): `METRICS` registry (name, title, category, compute from all histories); every
   metric gets one file per match and one aggregated file; overviews pick 6 (`MATCH_OVERVIEW`, `BATCH_OVERVIEW`).
+  The user's key metrics are metal income, energy income and units alive (`KEY_METRICS`, top row of overviews).
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
   for timeouts) and writes winner + full `Spring.GetTeamStatsHistory` per team (one entry per 15 s, cumulative).
 - Parallel: 4 matches at once run at ≈ x20 each (one alone ≈ x35); the engine uses ~2.3 cores.
