@@ -3,7 +3,7 @@ name = "beyond-all-reason-environment"
 version = "0.1.0"
 description = "Headless test harness and reinforcement learning environment for Beyond All Reason"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = ["pyyaml>=6"]
 
 [build-system]
 requires = ["setuptools>=68"]

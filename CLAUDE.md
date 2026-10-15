@@ -30,7 +30,8 @@ so the environment must match its interface (to confirm).
 
 ## Roadmap (start small)
 - [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (BARb vs BARb headless → winner,
-      `--graphical` to watch), `scripts/run_matches.py` (parallel batch + statistics, `batch.py`).
+      `--graphical` to watch), `scripts/run_matches.py configurations/<file>.yaml`
+      (parallel batch + statistics into `runs/<name>/`, `batch.py`).
 - [ ] Step 1: Lua widget/gadget dumps game state (units: pos, hp, team; team
       resources) to JSON every N frames.
 - [ ] Step 2: 2D viewer (top-down map, team colours, time slider, resource curves).

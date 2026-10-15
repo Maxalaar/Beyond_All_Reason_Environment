@@ -22,12 +22,21 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 ```bash
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
-python scripts/run_matches.py --matches 5           # 5 matches in parallel, then statistics
-python scripts/run_matches.py --matches 20 --parallel 6 --alternate-sides
+python scripts/run_matches.py configurations/barb_versus_barb.yaml   # several matches, then statistics
 ```
 
-Each match writes its start script, logs and result into `runs/`; a batch also writes a
-`summary.json` with every match and the averaged statistics.
+`run_matches.py` reads everything from a YAML file in `configurations/`: the name of the run, the
+players, the number of matches, how many run in parallel, seeds, map, time limit. Copy
+`barb_versus_barb.yaml` to start a new experiment. Results go to `runs/<name>/`:
+
+| File | Content |
+|---|---|
+| `configuration.yaml` | copy of the configuration file used |
+| `summary.txt` | statistics table: wins, durations, mean metal, damage and units per player |
+| `summary.json` | the same plus every match, for later analysis |
+| `match_000_seed1/` … | start script, engine logs and result of each match |
+
+An existing `runs/<name>/` is never overwritten unless `--overwrite` is given.
 
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.

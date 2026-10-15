@@ -1,0 +1,20 @@
+# BARb against itself: baseline to measure the noise of the results.
+# Run with: python scripts/run_matches.py configurations/barb_versus_barb.yaml
+# Results go to runs/<name>/ (summary.txt, summary.json, one folder per match).
+
+name: barb_versus_barb
+
+matches: 10
+parallel: 4            # matches at the same time, about 5 GB of memory each
+first_seed: 1          # match i uses seed first_seed + i
+alternate_sides: true  # swap the sides every other match, to cancel the faction advantage
+maximum_game_minutes: 60
+map_name: Red Comet Remake 1.8
+
+players:
+  - short_name: BARb   # built-in artificial intelligence (folder name in engine/AI/Skirmish)
+    version: stable
+    side: Armada       # Armada or Cortex
+  - short_name: BARb
+    version: stable
+    side: Cortex
