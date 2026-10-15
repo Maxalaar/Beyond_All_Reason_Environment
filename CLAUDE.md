@@ -74,7 +74,10 @@ so the environment must match its interface (to confirm).
   intervals, aggregation over time); web interface `results_browser.py` (Streamlit, launched by
   scripts/browse_results.py; tested headless with `streamlit.testing.v1.AppTest`). The widget records start
   positions (`Spring.GetTeamStartPosition`) and map size since this change; older matches have none.
-- Ideas agreed but not done: list of maps per batch, mirrored matches (swap spawns between twin matches) to
+- `map_name` may be a list (matches take maps in turn). Map sizes and 1v1 pools: lobby_maps.validated.json at
+  maps-metadata.beyondallreason.dev. Downloaded: Red Comet Remake 1.8 (12x8), Comet Catcher Remake 1.8 (16x12),
+  Archsimkats_Valley_V1 (16x16). The web interface has a map filter and wins per map.
+- Ideas agreed but not done: mirrored matches (swap spawns between twin matches) to
   cancel map/spawn bias, logistic regression win ~ side + map + spawn.
 - Legion needs mod option `experimentallegionfaction=1` (added automatically); BARb then plays it.
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`

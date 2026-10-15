@@ -40,7 +40,10 @@ class BatchConfiguration:
     # Match i uses seed first_seed + i.
     first_seed: int = 1
     maximum_game_minutes: float = 60.0
-    map_name: str = DEFAULT_MAP
+    # One map, or a list: matches then take the maps in turn (match i plays map i % len), so each map gets
+    # the same number of matches (60 matches on 3 maps: 20 each). Maps must be downloaded first
+    # (python scripts/download_game_data.py --map "<name>").
+    map_name: str | list[str] = DEFAULT_MAP
     # Save a replay of each match (a few hundred kB each), to watch with scripts/watch_replay.py.
     record_replays: bool = False
     # Keep everything the engine writes in each match folder (about 5 MB), for debugging.
@@ -53,6 +56,8 @@ class BatchConfiguration:
             raise ValueError("at least two players are needed")
         if self.matches < 1 or self.parallel < 1:
             raise ValueError("matches and parallel must be at least 1")
+        if not self.map_name:
+            raise ValueError("map_name must be a map or a non-empty list of maps")
 
     def match_configurations(self) -> list[MatchConfiguration]:
         """One configuration per match; players with several factions get one drawn from their list."""
@@ -67,7 +72,9 @@ class BatchConfiguration:
                         )
                         for number, player in enumerate(self.players)
                     ],
-                    map_name=self.map_name,
+                    map_name=self.map_name
+                    if isinstance(self.map_name, str)
+                    else self.map_name[index % len(self.map_name)],
                     seed=seed,
                     maximum_game_minutes=self.maximum_game_minutes,
                     record_replay=self.record_replays,

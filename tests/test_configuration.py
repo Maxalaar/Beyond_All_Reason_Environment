@@ -75,3 +75,9 @@ def test_each_run_of_a_name_gets_a_new_version(tmp_path):
     first, second = new_version_directory(tmp_path / "name"), new_version_directory(tmp_path / "name")
     assert (first.name, second.name) == ("version_1", "version_2")
     assert first.is_dir() and second.is_dir()
+
+
+def test_list_of_maps_is_shared_equally():
+    batch = BatchConfiguration(name="test", players=TWO_PLAYERS, matches=6, map_name=["Small", "Medium", "Large"])
+    maps = [match.map_name for match in batch.match_configurations()]
+    assert maps == ["Small", "Medium", "Large"] * 2

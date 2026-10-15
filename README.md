@@ -35,7 +35,10 @@ python scripts/browse_results.py                                    # web interf
 how many run in parallel, seeds, map, time limit. Each player keeps its color in every chart. Its `side` is one
 faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
 (reproducibly from the seed) and `summary.txt` gives its wins per faction. To compare factions, give
-the players different factions; to compare artificial intelligences, give them different `short_name`. Copy `barb_versus_barb.py` to start a new experiment;
+the players different factions; to compare artificial intelligences, give them different `short_name`.
+`map_name` is one map or a list: matches then take the maps in turn, so each map gets the same number of
+matches (see `configurations/factions_by_map_size.py`). Download maps first with
+`python scripts/download_game_data.py --map "<name>"`. Copy `barb_versus_barb.py` to start a new experiment;
 the editor completes and type-checks the fields. Results go to `runs/<name>/`:
 
 ```

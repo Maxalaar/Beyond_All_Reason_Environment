@@ -52,6 +52,13 @@ def load_tables(paths: tuple[str, ...], modification_times: tuple[float, ...]) -
     return read_tables([Path(path) for path in paths])
 
 
+def keep_maps(tables: dict[str, pd.DataFrame], maps: list[str]) -> dict[str, pd.DataFrame]:
+    """The rows of the matches played on these maps, in every table (all of them have match_id)."""
+    matches = tables["matches"]
+    kept = list(matches.loc[matches["map_name"].isin(maps), "match_id"])
+    return {name: frame.loc[frame["match_id"].isin(kept)].copy() for name, frame in tables.items()}
+
+
 def add_group_column(tables: dict[str, pd.DataFrame], grouping: str) -> None:
     """Add a "group" column to the players and timeseries tables, following the chosen comparison."""
     players = tables["players"]
@@ -138,6 +145,23 @@ def summary_tab(tables: dict[str, pd.DataFrame], colors: dict[str, str]) -> None
         "When the intervals of two groups overlap a lot, the difference may be chance: play more matches."
     )
     st.dataframe(rates.round(3), hide_index=True, width="stretch")
+    if players["map_name"].nunique() > 1:
+        st.subheader("Wins per map")
+        by_map = players.pivot_table(index="map_name", columns="group", values="won", aggfunc=["sum", "count"])
+        wins_per_map = pd.DataFrame(index=by_map.index)
+        for group in sorted(players["group"].unique()):
+            wins_per_map[group] = [
+                f"{int(wins)} / {int(played)} ({wins / played:.0%})"
+                for wins, played in zip(by_map[("sum", group)], by_map[("count", group)], strict=True)
+            ]
+        timeouts = (
+            players.drop_duplicates("match_id")
+            .groupby("map_name")["outcome"]
+            .apply(lambda outcomes: int((outcomes == "timeout").sum()))
+        )
+        wins_per_map["time limit"] = timeouts
+        st.dataframe(wins_per_map, width="stretch")
+        st.caption("Each cell: wins / matches played on that map. Use the Maps filter to see every tab for one map.")
 
     left, right = st.columns(2)
     with left:
@@ -383,6 +407,12 @@ def main() -> None:
         tuple(str(path) for path in chosen_versions), tuple(path.stat().st_mtime for path in chosen_versions)
     )
     tables = {name: frame.copy() for name, frame in tables.items()}
+    maps = sorted(tables["matches"]["map_name"].unique())
+    chosen_maps = st.sidebar.multiselect("Maps", maps, default=maps)
+    tables = keep_maps(tables, chosen_maps)
+    if tables["matches"].empty:
+        st.info("Choose at least one map in the sidebar.")
+        return
     add_group_column(tables, grouping)
     colors = group_colors(list(tables["players"]["group"].unique()), grouping)
 
