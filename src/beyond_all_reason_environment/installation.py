@@ -40,15 +40,15 @@ def download_engine() -> None:
     if HEADLESS_EXECUTABLE.exists():
         print(f"Engine {ENGINE_VERSION} already present.")
         return
-    if shutil.which("7z") is None:
-        raise RuntimeError("7z not found: run this inside `nix develop`.")
+    # Outside `nix develop`, borrow 7z from Nix for this one command.
+    seven_zip = ["7z"] if shutil.which("7z") else ["nix", "shell", "nixpkgs#p7zip", "--command", "7z"]
     print(f"Downloading engine {ENGINE_VERSION}...")
     with tempfile.TemporaryDirectory() as temporary_directory:
         archive = Path(temporary_directory) / "engine.7z"
         urllib.request.urlretrieve(ENGINE_URL, archive)
         ENGINE_DIRECTORY.mkdir(parents=True, exist_ok=True)
         subprocess.run(
-            ["7z", "x", "-y", f"-o{ENGINE_DIRECTORY}", str(archive)],
+            [*seven_zip, "x", "-y", f"-o{ENGINE_DIRECTORY}", str(archive)],
             check=True,
             stdout=subprocess.DEVNULL,
         )

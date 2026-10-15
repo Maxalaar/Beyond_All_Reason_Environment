@@ -1,11 +1,12 @@
-"""Run one headless match and return its result."""
+"""Run one match, with or without graphics, and return its result."""
 
+import functools
 import json
 import os
 import shutil
 import subprocess
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -14,15 +15,22 @@ from .start_script import FRAMES_PER_SECOND, MatchConfiguration, build_start_scr
 
 RUNS_DIRECTORY = REPOSITORY_ROOT / "runs"
 LUA_WIDGETS_DIRECTORY = Path(__file__).parent / "lua" / "widgets"
+# Written by lua/widgets/match_result_reporter.lua.
+RESULT_RELATIVE_PATH = Path("LuaUI") / "Config" / "match_result.json"
 
 
 @dataclass
 class MatchResult:
-    # Index of the winning player in MatchConfiguration.players, or None for a draw or timeout.
+    # "victory", "draw", "timeout" (maximum game time reached) or "crash" (no result written).
+    outcome: str
+    # Index of the winning player in MatchConfiguration.players, only for a victory.
     winner: int | None
     game_frames: int | None
     wall_clock_seconds: float
     run_directory: Path
+    # One dictionary per player, in the order of MatchConfiguration.players: final engine statistics
+    # (metalProduced, damageDealt, unitsKilled...) and units alive at the end (unitsAlive).
+    team_statistics: list[dict] = field(default_factory=list)
 
     @property
     def game_minutes(self) -> float | None:
@@ -48,6 +56,28 @@ NVIDIA_OFFLOAD_ENVIRONMENT = {
     "__VK_LAYER_NV_optimus": "NVIDIA_only",
     "SDL_VIDEODRIVER": "x11",
 }
+
+# OpenGL driver of NixOS (NVIDIA or Mesa).
+SYSTEM_OPENGL_LIBRARY_DIRECTORY = "/run/opengl-driver/lib"
+
+
+@functools.cache
+def graphics_library_path() -> str:
+    """SDL2, X11 and OpenAL for the graphical engine, which NixOS does not expose globally.
+
+    Inside `nix develop` they come from an environment variable; anywhere else (conda, plain Python)
+    they are built once by Nix from flake.nix and then reused from the Nix store.
+    """
+    path = os.environ.get("BEYOND_ALL_REASON_GRAPHICS_LIBRARY_PATH")
+    if path is None:
+        output = subprocess.run(
+            ["nix", "build", "--no-link", "--print-out-paths", f"{REPOSITORY_ROOT}#graphics-libraries"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        path = f"{output}/lib"
+    return f"{path}:{SYSTEM_OPENGL_LIBRARY_DIRECTORY}"
 
 
 def run_match(
@@ -79,12 +109,8 @@ def run_match(
         (run_directory / "springsettings.cfg").write_text(
             "".join(f"{key} = {value}\n" for key, value in GRAPHICAL_SETTINGS.items())
         )
-        # Set by flake.nix: SDL2, X11, OpenAL and the OpenGL driver, which NixOS does not expose globally.
-        graphics_library_path = os.environ.get("BEYOND_ALL_REASON_GRAPHICS_LIBRARY_PATH")
-        if graphics_library_path is None:
-            raise RuntimeError("Graphical matches need the libraries from `nix develop`.")
         environment["LD_LIBRARY_PATH"] = ":".join(
-            filter(None, [graphics_library_path, os.environ.get("LD_LIBRARY_PATH")])
+            filter(None, [graphics_library_path(), os.environ.get("LD_LIBRARY_PATH")])
         )
         if shutil.which("nvidia-smi") is not None:
             environment.update(NVIDIA_OFFLOAD_ENVIRONMENT)
@@ -100,11 +126,19 @@ def run_match(
         )
     wall_clock_seconds = time.monotonic() - start_time
 
-    result_path = run_directory / "LuaUI" / "Config" / "match_result.json"
+    result_path = run_directory / RESULT_RELATIVE_PATH
     if not result_path.exists():
-        return MatchResult(None, None, wall_clock_seconds, run_directory)
+        return MatchResult("crash", None, None, wall_clock_seconds, run_directory)
     result = json.loads(result_path.read_text())
+
+    # Each player has its own team and ally team, both numbered like the players.
+    statistics_by_team = {int(team): values for team, values in result["teams"].items()}
+    team_statistics = [statistics_by_team.get(index, {}) for index in range(len(configuration.players))]
     winners = result["winning_ally_teams"]
-    # Each player has its own ally team, numbered like the players.
-    winner = winners[0] if len(winners) == 1 else None
-    return MatchResult(winner, result["frame"], wall_clock_seconds, run_directory)
+    if not result["game_over"]:
+        outcome, winner = "timeout", None
+    elif len(winners) == 1:
+        outcome, winner = "victory", winners[0]
+    else:
+        outcome, winner = "draw", None
+    return MatchResult(outcome, winner, result["frame"], wall_clock_seconds, run_directory, team_statistics)

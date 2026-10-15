@@ -12,7 +12,9 @@ so the environment must match its interface (to confirm).
 
 ## Machine
 - NixOS 25.11, 20 CPU cores, 31 GiB RAM, NVIDIA RTX 5070 Laptop (8 GiB VRAM), Python 3.13.
-- No docker, gcc or cmake installed globally → everything goes through `flake.nix` (`nix develop`).
+- No docker, gcc or cmake installed globally. The user works in conda environments
+  (`/media/SSD_1To/conda/envs/`); the package is `pip install -e .` there, no `nix develop` needed:
+  `match.py` builds `flake.nix#graphics-libraries` on demand for graphical matches.
 - nix-ld is enabled system-wide, so the prebuilt engine binaries run as is.
 
 ## Key technical choices (agreed so far)
@@ -27,7 +29,8 @@ so the environment must match its interface (to confirm).
 - Later: imitation pre-training on Beyond All Reason's public replays (.sdfz), AlphaStar-style.
 
 ## Roadmap (start small)
-- [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (BARb vs BARb headless → winner).
+- [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (BARb vs BARb headless → winner,
+      `--graphical` to watch), `scripts/run_matches.py` (parallel batch + statistics, `batch.py`).
 - [ ] Step 1: Lua widget/gadget dumps game state (units: pos, hp, team; team
       resources) to JSON every N frames.
 - [ ] Step 2: 2D viewer (top-down map, team colours, time slider, resource curves).
@@ -48,7 +51,9 @@ so the environment must match its interface (to confirm).
 - Graphical mode (`--graphical`, binary `spring`): needs SDL2/X11/OpenAL from `flake.nix`
   (`BEYOND_ALL_REASON_GRAPHICS_LIBRARY_PATH`). Default renderer is the Intel iGPU (≈ x5 max);
   with NVIDIA PRIME offload variables + `SDL_VIDEODRIVER=x11` it uses the RTX (x10 reached).
-- The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver`.
+- The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
+  for timeouts) and writes winner + final `Spring.GetTeamStatsHistory` entry per team.
+- Parallel: 4 matches at once run at ≈ x20 each (one alone ≈ x35); the engine uses ~2.3 cores.
 - BARb vs BARb is NOT reproducible with the same `FixedRNGSeed` (55, 33, 46 min, timeout).
   Probably BARb itself (threads/timing); to investigate before relying on seeds.
 - The game repository has its own headless test tooling: `tools/headless_testing/` and

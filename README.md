@@ -3,15 +3,31 @@
 Headless test harness (and, later, a Gymnasium/PettingZoo environment) for the real-time strategy
 game [Beyond All Reason](https://www.beyondallreason.info/).
 
-## Quick start (Linux, Nix)
+## Installation (once)
+
+Any Python ≥ 3.11 environment works, for example a conda environment:
 
 ```bash
-nix develop                          # Python, 7z, git
-python scripts/download_game_data.py # engine + game + map into game_data/ (~2 GB)
-python scripts/run_match.py --seed 1 # BARb vs BARb without graphics, prints the winner
-python scripts/run_match.py --graphical --speed 3  # watch a match in a window
+conda create -n BeyondAllReasonReinforcementLearning python=3.13
+conda activate BeyondAllReasonReinforcementLearning
+pip install -e .                      # editable: code changes apply without reinstalling
+python scripts/download_game_data.py  # engine + game + map into game_data/ (~2 GB)
 ```
 
-In the window, `+` and `-` change the game speed. Graphical matches render on the NVIDIA card when present.
+No `nix develop` needed: on NixOS the libraries of the graphical engine are built by Nix
+from `flake.nix` the first time a window is opened. `nix develop` still works if preferred.
 
-Each match writes its start script, logs and result into `runs/<date>_seed<seed>/`.
+## Usage
+
+```bash
+python scripts/run_match.py                         # one match without graphics, prints the winner
+python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
+python scripts/run_matches.py --matches 5           # 5 matches in parallel, then statistics
+python scripts/run_matches.py --matches 20 --parallel 6 --alternate-sides
+```
+
+Each match writes its start script, logs and result into `runs/`; a batch also writes a
+`summary.json` with every match and the averaged statistics.
+
+Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
+about 5 GB of memory per match.

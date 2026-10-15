@@ -40,14 +40,14 @@ def main() -> None:
         configuration.speed = 1.0
     result = run_match(configuration, graphical=arguments.graphical)
 
-    if result.game_frames is None:
-        print(f"No result (timeout or crash). Logs: {result.run_directory / 'engine_output.log'}")
+    if result.outcome == "crash":
+        print(f"No result (crash or window closed). Logs: {result.run_directory / 'engine_output.log'}")
         return
-    if result.winner is None:
-        print("Draw.")
-    else:
+    if result.outcome == "victory":
         player = configuration.players[result.winner]
         print(f"Winner: player {result.winner} ({player.short_name}, {player.side})")
+    else:
+        print(f"No winner ({result.outcome}).")
     print(
         f"{result.game_minutes:.1f} game minutes in {result.wall_clock_seconds:.0f} s "
         f"(speed x{result.speed_factor:.0f}). Logs: {result.run_directory}"
