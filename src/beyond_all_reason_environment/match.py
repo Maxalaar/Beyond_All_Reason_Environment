@@ -40,6 +40,9 @@ class MatchResult:
     # with "time" in seconds. Used by plots.py.
     team_history: list[list[dict]] = field(default_factory=list, repr=False)
     replay_path: Path | None = None
+    # One {"x": ..., "z": ...} per player (map coordinates, None if unknown), and the map size {"sizeX", "sizeZ"}.
+    start_positions: list[dict | None] = field(default_factory=list)
+    map_size: dict | None = None
 
     @property
     def game_minutes(self) -> float | None:
@@ -163,9 +166,13 @@ def run_match(
         )
     wall_clock_seconds = time.monotonic() - start_time
     _tidy_run_directory(run_directory, configuration.keep_engine_files)
+    return read_match_result(run_directory, len(configuration.players), wall_clock_seconds)
+
+
+def read_match_result(run_directory: Path, number_of_players: int, wall_clock_seconds: float) -> MatchResult:
+    """Build the result of a finished match from its match_result.json ("crash" when it is missing)."""
     replay_path = run_directory / REPLAY_FILE_NAME
     replay = replay_path if replay_path.exists() else None
-
     result_path = run_directory / RESULT_FILE_NAME
     if not result_path.exists():
         return MatchResult("crash", None, None, wall_clock_seconds, run_directory, replay_path=replay)
@@ -173,7 +180,7 @@ def run_match(
 
     # Each player has its own team and ally team, both numbered like the players.
     teams = {int(team): values for team, values in result["teams"].items()}
-    team_history = [teams[index]["history"] if index in teams else [] for index in range(len(configuration.players))]
+    team_history = [teams[index]["history"] if index in teams else [] for index in range(number_of_players)]
     team_statistics = [
         {**(history[-1] if history else {}), "unitsAlive": teams[index]["unitsAlive"]} if index in teams else {}
         for index, history in enumerate(team_history)
@@ -185,6 +192,16 @@ def run_match(
         outcome, winner = "victory", winners[0]
     else:
         outcome, winner = "draw", None
+    map_information = result.get("map")  # absent from matches played before it was recorded
     return MatchResult(
-        outcome, winner, result["frame"], wall_clock_seconds, run_directory, team_statistics, team_history, replay
+        outcome,
+        winner,
+        result["frame"],
+        wall_clock_seconds,
+        run_directory,
+        team_statistics,
+        team_history,
+        replay,
+        start_positions=[teams.get(index, {}).get("startPosition") for index in range(number_of_players)],
+        map_size={key: map_information[key] for key in ("sizeX", "sizeZ")} if map_information else None,
     )

@@ -3,7 +3,7 @@ name = "beyond-all-reason-environment"
 version = "0.1.0"
 description = "Headless test harness and reinforcement learning environment for Beyond All Reason"
 requires-python = ">=3.11"
-dependencies = ["matplotlib>=3.8"]
+dependencies = ["matplotlib>=3.8", "pandas>=2.2", "pyarrow>=16", "streamlit>=1.40", "plotly>=5.24"]
 
 [project.optional-dependencies]
 # pip install -e ".[development]"

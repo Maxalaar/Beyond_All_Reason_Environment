@@ -13,6 +13,7 @@ def synthetic_history(minutes: int, growth: float) -> list[dict]:
     return [
         {
             "time": second,
+            "frame": second * 30,
             "metalProduced": growth * second**1.5,
             "energyProduced": 20 * growth * second**1.5,
             "damageDealt": growth * second**2,
@@ -32,11 +33,33 @@ def synthetic_batch(directory: Path) -> tuple[list[MatchConfiguration], list[Mat
         run_directory = directory / "matches" / f"match_{index}"
         run_directory.mkdir(parents=True)
         histories = [synthetic_history(minutes, 1.0), synthetic_history(minutes, 1.2)]
-        teams = {str(player): {"history": history, "unitsAlive": 10} for player, history in enumerate(histories)}
-        (run_directory / "match_result.json").write_text(json.dumps({"teams": teams}))
+        teams = {
+            str(player): {
+                "history": history,
+                "unitsAlive": 10,
+                "startPosition": {"x": 1000.0 * (player + 1), "z": 500.0},
+            }
+            for player, history in enumerate(histories)
+        }
+        result = {"game_over": True, "winning_ally_teams": [winner], "frame": minutes * 60 * 30, "teams": teams}
+        result["map"] = {"name": "Test Map", "sizeX": 6144, "sizeZ": 4096}
+        (run_directory / "match_result.json").write_text(json.dumps(result))
         statistics = [{**history[-1], "unitsAlive": 10} for history in histories]
         configurations.append(MatchConfiguration(seed=index))
-        results.append(MatchResult("victory", winner, minutes * 60 * 30, 60.0, run_directory, statistics, histories))
+        starts = [teams[str(player)]["startPosition"] for player in range(len(histories))]
+        results.append(
+            MatchResult(
+                "victory",
+                winner,
+                minutes * 60 * 30,
+                60.0,
+                run_directory,
+                statistics,
+                histories,
+                start_positions=starts,
+                map_size={"sizeX": 6144, "sizeZ": 4096},
+            )
+        )
 
     return configurations, results
 

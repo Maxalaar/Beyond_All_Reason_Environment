@@ -30,19 +30,19 @@ from matplotlib.axes import Axes  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator, PercentFormatter  # noqa: E402
 
 from .batch import SUMMARISED_STATISTICS  # noqa: E402
+from .colors import GRID, NEUTRAL_COLOR, PLAYER_COLORS, SURFACE, TEXT_PRIMARY, TEXT_SECONDARY  # noqa: E402
 from .match import MatchResult  # noqa: E402
+from .metrics import (  # noqa: E402
+    BATCH_OVERVIEW,
+    KEY_METRICS,
+    MATCH_OVERVIEW,
+    METRICS,
+    METRICS_BY_NAME,
+    Metric,
+    minutes_of,
+)
 from .start_script import MatchConfiguration  # noqa: E402
 
-# Categorical slots in fixed order, one per player position.
-PLAYER_COLORS = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"]
-NEUTRAL_COLOR = "#8a8984"
-SURFACE = "#fcfcfb"
-TEXT_PRIMARY = "#0b0b0b"
-TEXT_SECONDARY = "#52514e"
-GRID = "#e6e5e0"
-
-# The engine records statistics every 15 s of game time; rates are averaged over this many entries (1 minute).
-RATE_SMOOTHING_ENTRIES = 4
 # Time step of the aggregated curves, in game minutes.
 AGGREGATION_STEP_MINUTES = 0.25
 
@@ -79,134 +79,6 @@ plt.rcParams.update(
         "lines.solid_capstyle": "round",
     }
 )
-
-Histories = list[list[dict]]
-
-
-# --- Metrics computed from the statistics history -----------------------------------------------------
-
-
-@dataclass(frozen=True)
-class Metric:
-    name: str  # file name
-    title: str
-    category: str  # economy, military or units: sub-folder of the charts
-    # (statistics history of every player, player index) -> one value per history entry
-    compute: Callable[[Histories, int], np.ndarray]
-    # "share" draws a 0-100 % axis
-    kind: str = "value"
-    # Dashed horizontal line, for example 1 for a ratio
-    reference_line: float | None = None
-    # Running total: when aggregating, a finished match keeps its final value instead of dropping out,
-    # otherwise the median of the remaining matches could go down.
-    is_total: bool = False
-
-
-def _times(history: list[dict]) -> np.ndarray:
-    return np.array([entry["time"] for entry in history], dtype=float)
-
-
-def _minutes(history: list[dict]) -> np.ndarray:
-    return _times(history) / 60
-
-
-def _values(history: list[dict], key: str) -> np.ndarray:
-    return np.array([entry.get(key, 0.0) for entry in history], dtype=float)
-
-
-def _trailing_mean(values: np.ndarray, window: int) -> np.ndarray:
-    positions = np.arange(1, values.size + 1)
-    sums = np.cumsum(np.concatenate([[0.0], values]))
-    return (sums[1:] - sums[np.maximum(positions - window, 0)]) / np.minimum(positions, window)
-
-
-def cumulative(key: str) -> Callable[[Histories, int], np.ndarray]:
-    return lambda histories, index: _values(histories[index], key)
-
-
-def rate(key: str, scale: float = 1.0) -> Callable[[Histories, int], np.ndarray]:
-    """Per-second rate of a cumulative statistic (times ``scale``), averaged over one minute."""
-
-    def compute(histories: Histories, index: int) -> np.ndarray:
-        history = histories[index]
-        rates = np.diff(_values(history, key)) / np.maximum(np.diff(_times(history)), 1e-9)
-        return _trailing_mean(np.concatenate([[0.0], rates]), RATE_SMOOTHING_ENTRIES) * scale
-
-    return compute
-
-
-def share(key: str) -> Callable[[Histories, int], np.ndarray]:
-    """Fraction of the total of all players, entry by entry (entries are recorded at the same frames)."""
-
-    def compute(histories: Histories, index: int) -> np.ndarray:
-        length = min(len(history) for history in histories if history)
-        totals = np.sum([_values(history[:length], key) for history in histories if history], axis=0)
-        own = _values(histories[index][:length], key)
-        result = np.full(len(histories[index]), np.nan)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            result[:length] = np.where(totals > 0, own / totals, np.nan)
-        return result
-
-    return compute
-
-
-def ratio(numerator: str, denominator: str, minimum_denominator: float) -> Callable[[Histories, int], np.ndarray]:
-    """Cumulative ratio, hidden while the denominator is too small to be meaningful."""
-
-    def compute(histories: Histories, index: int) -> np.ndarray:
-        top, bottom = _values(histories[index], numerator), _values(histories[index], denominator)
-        with np.errstate(invalid="ignore", divide="ignore"):
-            return np.where(bottom >= minimum_denominator, top / bottom, np.nan)
-
-    return compute
-
-
-def units_alive(histories: Histories, index: int) -> np.ndarray:
-    history = histories[index]
-    gained = _values(history, "unitsProduced") + _values(history, "unitsReceived") + _values(history, "unitsCaptured")
-    lost = _values(history, "unitsDied") + _values(history, "unitsSent") + _values(history, "unitsOutCaptured")
-    return gained - lost
-
-
-METRICS = [
-    # Economy
-    Metric("metal_income", "Metal income (per second)", "economy", rate("metalProduced")),
-    Metric("metal_spending", "Metal spending (per second)", "economy", rate("metalUsed")),
-    Metric("metal_produced", "Metal produced (total)", "economy", cumulative("metalProduced"), is_total=True),
-    Metric("metal_wasted", "Metal wasted, storage full (total)", "economy", cumulative("metalExcess"), is_total=True),
-    Metric("metal_produced_share", "Share of all metal produced", "economy", share("metalProduced"), "share", 0.5),
-    Metric("energy_income", "Energy income (per second)", "economy", rate("energyProduced")),
-    Metric("energy_spending", "Energy spending (per second)", "economy", rate("energyUsed")),
-    Metric("energy_produced", "Energy produced (total)", "economy", cumulative("energyProduced"), is_total=True),
-    Metric(
-        "energy_wasted", "Energy wasted, storage full (total)", "economy", cumulative("energyExcess"), is_total=True
-    ),
-    # Military
-    Metric("damage_per_second", "Damage dealt (per second)", "military", rate("damageDealt")),
-    Metric("damage_dealt", "Damage dealt (total)", "military", cumulative("damageDealt"), is_total=True),
-    Metric("damage_received", "Damage received (total)", "military", cumulative("damageReceived"), is_total=True),
-    Metric(
-        "damage_efficiency",
-        "Damage dealt / damage received",
-        "military",
-        ratio("damageDealt", "damageReceived", 2000),
-        reference_line=1.0,
-    ),
-    Metric("units_killed", "Units killed (total)", "military", cumulative("unitsKilled"), is_total=True),
-    Metric("units_lost", "Units lost (total)", "military", cumulative("unitsDied"), is_total=True),
-    # Units
-    Metric("units_alive", "Units alive", "units", units_alive),
-    Metric("units_produced", "Units produced (total)", "units", cumulative("unitsProduced"), is_total=True),
-    Metric("production_rate", "Units produced (per minute)", "units", rate("unitsProduced", 60)),
-]
-METRICS_BY_NAME = {metric.name: metric for metric in METRICS}
-
-# The most important metrics: the top row of every overview, in this order.
-KEY_METRICS = ["metal_income", "energy_income", "units_alive"]
-# Match overview: the key metrics, then three more.
-MATCH_OVERVIEW = [*KEY_METRICS, "metal_produced_share", "damage_dealt", "units_killed"]
-# Batch overview: the key metrics, then the outcomes, durations and this one.
-BATCH_OVERVIEW = [*KEY_METRICS, "metal_produced_share"]
 
 # Final statistic -> (file name, title)
 STATISTIC_NAMES = {
@@ -305,7 +177,7 @@ def _draw_match_metric(metric: Metric, result: MatchResult, configuration: Match
         for index, history in enumerate(result.team_history):
             if not history:
                 continue
-            minutes, values = _minutes(history), metric.compute(result.team_history, index)
+            minutes, values = minutes_of(history), metric.compute(result.team_history, index)
             color = PLAYER_COLORS[index]
             axes.plot(minutes, values, color=color, label=_player_label(configuration, index))
             _direct_label(axes, minutes, values, f"player {index}", color)
@@ -381,7 +253,7 @@ class _Timeline:
         return "share of the match duration (0 % start, 100 % end)" if self.relative else "game minutes"
 
     def x(self, match: int, history: list[dict]) -> np.ndarray:
-        minutes = _minutes(history)
+        minutes = minutes_of(history)
         return minutes / max(self.ends[match], 1e-9) if self.relative else minutes
 
     @classmethod
@@ -389,7 +261,7 @@ class _Timeline:
         played = [result for result in results if any(result.team_history)]
         if not played:
             return None
-        ends = [max(_minutes(history)[-1] for history in result.team_history if history) for result in played]
+        ends = [max(minutes_of(history)[-1] for history in result.team_history if history) for result in played]
         if relative:
             grid = np.linspace(0, 1, 101)
             running = np.full(grid.size, len(played))
@@ -399,7 +271,7 @@ class _Timeline:
         # Below this many matches still running, the median says little: curves stop there.
         return cls(played, ends, relative, grid, running, min(3, len(played)))
 
-    def half_finished_minutes(self) -> float | None:
+    def half_finishedminutes_of(self) -> float | None:
         """Game minute after which fewer than half of the matches are still running."""
         below = np.flatnonzero(self.running < len(self.played) / 2)
         return None if self.relative or below.size == 0 else float(self.grid[below[0]])
@@ -454,7 +326,7 @@ def _aggregation_note(timeline: _Timeline) -> str:
     )
     if timeline.relative:
         return note + " Time is the share of each match's duration, so every match counts at every point."
-    half = timeline.half_finished_minutes()
+    half = timeline.half_finishedminutes_of()
     if half is not None:
         note += (
             f" After {half:.0f} min, fewer than half of the matches are still running:"

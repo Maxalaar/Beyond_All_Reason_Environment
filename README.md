@@ -27,6 +27,7 @@ python scripts/run_match.py --graphical --speed 3   # watch a match in a window 
 python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
 python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5   # replay a recorded match
 python scripts/plot_run.py runs/barb_versus_barb/version_1          # redraw all charts of a batch, no replay needed
+python scripts/browse_results.py                                    # web interface to browse all results
 ```
 
 `run_matches.py` reads a Python file in `configurations/` that defines
@@ -43,7 +44,8 @@ runs/<name>/
 │   ├── overview.png            the six most telling charts, aggregated over all matches
 │   ├── configuration.py        copy of the configuration file used
 │   ├── summary.txt             statistics table: wins, durations, mean metal, damage, units per player
-│   ├── summary.json            the same plus every match, for later analysis
+│   ├── summary.json            the same plus every match
+│   ├── tables/                 matches.parquet, players.parquet, timeseries.parquet (see below)
 │   ├── charts/                 all the aggregated charts
 │   │   ├── outcomes/           wins.png, durations.png
 │   │   ├── over_time/          per player over game time: median, interquartile band, one thin line per match
@@ -71,6 +73,29 @@ Earlier versions are never modified: a new run of the same configuration goes to
 
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.
+
+## Analysis
+
+Each batch also writes Parquet tables in `runs/<name>/version_<n>/tables/`:
+
+| Table | One row per | Main columns |
+|---|---|---|
+| `matches.parquet` | match | `match_id`, experiment, version, seed, map, outcome, winner, game minutes, engine and game versions |
+| `players.parquet` | player in a match | artificial intelligence, side, start position, `won`, final statistics |
+| `timeseries.parquet` | player and statistics entry (every 15 s) | raw engine statistics and the metrics of the charts (`metal_income`, `units_alive`...) |
+
+Every row has `match_id`, `experiment` and `version`, so the tables of all batches can be analysed
+together, with pandas (`tables.read_tables`) or DuckDB:
+
+```sql
+SELECT side, avg(won::int) FROM 'runs/*/version_*/tables/players.parquet' GROUP BY side
+```
+
+`python scripts/browse_results.py` opens a web interface (Streamlit) on these tables: choose experiments
+and versions, compare by player, faction or artificial intelligence, see win rates with their 95 %
+confidence interval, curves over time (in game minutes or share of each match's duration), end-of-match
+statistics, start positions, and each match with its replay command. Batches played before the tables
+existed need `python scripts/export_tables.py` once.
 
 ## Development
 

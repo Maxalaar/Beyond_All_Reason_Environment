@@ -18,16 +18,19 @@ local RESULT_PATH = "LuaUI/Config/match_result.json"
 local resultWritten = false
 
 -- Full engine statistics history of each team: one entry every 16 seconds of game time, with
--- cumulative values (metalProduced, damageDealt, unitsKilled...), plus the units alive at the end.
+-- cumulative values (metalProduced, damageDealt, unitsKilled...), the units alive at the end and the
+-- start position (x, z in map coordinates), to study the effect of the spawn on the outcome.
 local function teamStatistics()
 	local statistics = {}
 	local gaiaTeamID = Spring.GetGaiaTeamID()
 	for _, teamID in ipairs(Spring.GetTeamList()) do
 		if teamID ~= gaiaTeamID then
 			local count = Spring.GetTeamStatsHistory(teamID) or 0
+			local startX, _, startZ = Spring.GetTeamStartPosition(teamID)
 			statistics[tostring(teamID)] = {
 				history = count > 0 and Spring.GetTeamStatsHistory(teamID, 1, count) or {},
 				unitsAlive = Spring.GetTeamUnitCount(teamID),
+				startPosition = startX and { x = startX, z = startZ } or nil,
 			}
 		end
 	end
@@ -41,6 +44,7 @@ local function writeResult(gameOver, winningAllyTeams)
 			game_over = gameOver,
 			winning_ally_teams = winningAllyTeams,
 			frame = Spring.GetGameFrame(),
+			map = { name = Game.mapName, sizeX = Game.mapSizeX, sizeZ = Game.mapSizeZ },
 			teams = teamStatistics(),
 		}))
 		file:close()

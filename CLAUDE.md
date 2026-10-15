@@ -69,6 +69,13 @@ so the environment must match its interface (to confirm).
   list (drawn per match from the seed). No side swapping: start positions are already random per seed.
 - Aggregated curves in game minutes suffer survivor bias (late values = long matches only); hence thin per-match
   lines, the "fewer than half running" note, and `over_time_relative/` (x = share of each match's duration).
+- Analysis: `tables.py` writes runs/<name>/version_<n>/tables/{matches,players,timeseries}.parquet (match_id,
+  experiment, version on every row; metrics from `metrics.py`, shared with `plots.py`); `analysis.py` (Wilson
+  intervals, aggregation over time); web interface `results_browser.py` (Streamlit, launched by
+  scripts/browse_results.py; tested headless with `streamlit.testing.v1.AppTest`). The widget records start
+  positions (`Spring.GetTeamStartPosition`) and map size since this change; older matches have none.
+- Ideas agreed but not done: list of maps per batch, mirrored matches (swap spawns between twin matches) to
+  cancel map/spawn bias, logistic regression win ~ side + map + spawn.
 - Legion needs mod option `experimentallegionfaction=1` (added automatically); BARb then plays it.
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
   for timeouts) and writes winner + full `Spring.GetTeamStatsHistory` per team (one entry per 15 s, cumulative).

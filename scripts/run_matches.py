@@ -8,7 +8,8 @@ adds version_<n+1>/ next to the earlier ones:
     overview.png         the six most telling charts, aggregated over the matches
     configuration.py     copy of the configuration file used
     summary.txt          the statistics table printed at the end
-    summary.json         the summary and every match, for later analysis
+    summary.json         the summary and every match
+    tables/              matches.parquet, players.parquet, timeseries.parquet, for analysis (see tables.py)
     charts/              all the aggregated charts: outcomes/, over_time/, over_time_relative/, end_of_match/
     matches/match_000_seed1/
         overview.png, script.txt, match_result.json, engine_output.log, replay.sdfz
@@ -29,6 +30,7 @@ from beyond_all_reason_environment.batch import (
 )
 from beyond_all_reason_environment.match import RUNS_DIRECTORY, MatchResult
 from beyond_all_reason_environment.plots import plot_batch
+from beyond_all_reason_environment.tables import write_tables
 
 
 def describe(result: MatchResult) -> str:
@@ -59,6 +61,7 @@ def main() -> None:
     results = run_matches(configurations, batch_directory, batch.parallel, on_result)
     summary = summarise(configurations, results)
     save_batch(batch_directory, configurations, results, summary)
+    write_tables(batch_directory, configurations, results)
     print("\n" + format_summary(summary))
     plot_batch(configurations, results, batch_directory)
     print(f"Saved in {batch_directory}, overview: {batch_directory / 'overview.png'}")

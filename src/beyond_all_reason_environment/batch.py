@@ -11,7 +11,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .installation import DEFAULT_MAP
-from .match import RESULT_FILE_NAME, MatchResult, run_match
+from .match import MatchResult, read_match_result, run_match
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration, Side
 
 # Final engine statistics averaged per player in the summary.
@@ -234,7 +234,7 @@ def save_batch(
 ) -> None:
     """Write summary.txt (the table) and summary.json (the summary and every match, for later analysis)."""
     (batch_directory / "summary.txt").write_text(format_summary(summary))
-    # The full statistics history stays in each match folder (match_result.json).
+    # The full statistics history stays in each match folder (match_result.json) and in the Parquet tables.
     matches = [
         {
             "configuration": asdict(configuration),
@@ -259,20 +259,5 @@ def load_batch(batch_directory: Path) -> tuple[list[MatchConfiguration], list[Ma
         configurations.append(MatchConfiguration(**configuration))
         # Found by name, so the batch folder can be moved or copied.
         run_directory = batch_directory / "matches" / Path(match["run_directory"]).name
-        result_path = run_directory / RESULT_FILE_NAME
-        teams = json.loads(result_path.read_text())["teams"] if result_path.exists() else {}
-        team_history = [teams.get(str(index), {}).get("history", []) for index in range(len(configuration["players"]))]
-        replay_path = match.get("replay_path")
-        results.append(
-            MatchResult(
-                outcome=match["outcome"],
-                winner=match["winner"],
-                game_frames=match["game_frames"],
-                wall_clock_seconds=match["wall_clock_seconds"],
-                run_directory=run_directory,
-                team_statistics=match["team_statistics"],
-                team_history=team_history,
-                replay_path=run_directory / Path(replay_path).name if replay_path else None,
-            )
-        )
+        results.append(read_match_result(run_directory, len(configuration["players"]), match["wall_clock_seconds"]))
     return configurations, results
