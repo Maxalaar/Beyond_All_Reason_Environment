@@ -1,11 +1,11 @@
 """Charts of one match (statistics over time) and of a batch of matches (aggregated).
 
-Every metric gets its own chart file, sorted by category, and an overview image gathers the six most
-telling ones:
+Every metric gets its own chart file, sorted by category, and an overview image at the root of the
+match or batch folder gathers the six most telling ones:
 
-    <match folder>/charts/overview.png
+    <match folder>/overview.png
     <match folder>/charts/{economy,military,units}/<metric>.png
-    <batch folder>/charts/overview.png
+    <batch folder>/overview.png
     <batch folder>/charts/outcomes/{wins,durations}.png
     <batch folder>/charts/over_time/{economy,military,units}/<metric>.png, over_time/matches_running.png
     <batch folder>/charts/over_time_relative/{economy,military,units}/<metric>.png  (x: share of match duration)
@@ -45,6 +45,9 @@ GRID = "#e6e5e0"
 RATE_SMOOTHING_ENTRIES = 4
 # Time step of the aggregated curves, in game minutes.
 AGGREGATION_STEP_MINUTES = 0.25
+
+CHARTS_FOLDER = "charts"
+OVERVIEW_FILE_NAME = "overview.png"
 
 SINGLE_CHART_SIZE = (8, 4.5)
 OVERVIEW_SIZE = (15, 8.5)
@@ -320,14 +323,15 @@ def _match_description(result: MatchResult, configuration: MatchConfiguration) -
     return f"Seed {configuration.seed}, {configuration.map_name}: {outcome} after {minutes:.1f} game minutes"
 
 
-def plot_match(result: MatchResult, configuration: MatchConfiguration, directory: Path) -> list[Path]:
-    """Overview and one chart per metric of one match, in ``directory`` (usually <match folder>/charts)."""
+def plot_match(result: MatchResult, configuration: MatchConfiguration, match_directory: Path) -> list[Path]:
+    """overview.png at the root of ``match_directory``, and one chart per metric in its charts/ folder."""
     if not any(result.team_history):
         return []
+    directory = match_directory / CHARTS_FOLDER
     description = _match_description(result, configuration)
     paths = [
         _save_overview(
-            directory / "overview.png",
+            match_directory / OVERVIEW_FILE_NAME,
             [_draw_match_metric(METRICS_BY_NAME[name], result, configuration) for name in MATCH_OVERVIEW],
             description,
         )
@@ -557,12 +561,14 @@ def _draw_final_statistic(
 
 
 def plot_batch(
-    configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult], directory: Path
+    configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult], batch_directory: Path
 ) -> list[Path]:
-    """Charts of every match (in <match folder>/charts) and charts aggregated over the batch in ``directory``."""
+    """Charts of every match in its own folder, then the aggregated ones: overview.png at the root of
+    ``batch_directory``, the others in its charts/ folder."""
     paths: list[Path] = []
     for configuration, result in zip(configurations, results, strict=True):
-        paths += plot_match(result, configuration, result.run_directory / "charts")
+        paths += plot_match(result, configuration, result.run_directory)
+    directory = batch_directory / CHARTS_FOLDER
 
     paths.append(_save_single(directory / "outcomes" / "wins.png", _draw_wins(configurations, results)))
     paths.append(_save_single(directory / "outcomes" / "durations.png", _draw_durations(results)))
@@ -593,5 +599,5 @@ def plot_batch(
     metric_draws = [_draw_batch_metric(METRICS_BY_NAME[name], timeline, configurations) for name in BATCH_OVERVIEW]
     overview = [*metric_draws[: len(KEY_METRICS)], _draw_wins(configurations, results), _draw_durations(results)]
     overview += metric_draws[len(KEY_METRICS) :]
-    paths.append(_save_overview(directory / "overview.png", overview, _aggregation_note(timeline)))
+    paths.append(_save_overview(batch_directory / OVERVIEW_FILE_NAME, overview, _aggregation_note(timeline)))
     return paths

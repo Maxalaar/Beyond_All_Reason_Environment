@@ -25,8 +25,8 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
 python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
-python scripts/watch_replay.py runs/barb_versus_barb/matches/match_000_seed1 --speed 5   # replay a recorded match
-python scripts/plot_run.py runs/barb_versus_barb          # redraw all charts of a batch, no replay needed
+python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5   # replay a recorded match
+python scripts/plot_run.py runs/barb_versus_barb/version_1          # redraw all charts of a batch, no replay needed
 ```
 
 `run_matches.py` reads a Python file in `configurations/` that defines
@@ -39,32 +39,35 @@ the editor completes and type-checks the fields. Results go to `runs/<name>/`:
 
 ```
 runs/<name>/
-├── configuration.py            copy of the configuration file used
-├── summary.txt                 statistics table: wins, durations, mean metal, damage, units per player
-├── summary.json                the same plus every match, for later analysis
-├── charts/                     aggregated over all matches
-│   ├── overview.png            the six most telling charts on one image
-│   ├── outcomes/               wins.png, durations.png
-│   ├── over_time/              per player over game time: median, interquartile band, one thin line per match
-│   │   ├── economy/            metal and energy income, spending, totals, waste, share of metal
-│   │   ├── military/           damage per second and totals, damage efficiency, units killed and lost
-│   │   ├── units/              units alive, produced, production rate
-│   │   └── matches_running.png
-│   ├── over_time_relative/     the same with time as a share of each match's duration (no survivor bias)
-│   └── end_of_match/           final statistics, one dot per match (all.png gathers them)
-└── matches/
-    └── match_000_seed1/
-        ├── script.txt          start script
-        ├── match_result.json   winner and full statistics history (every 15 s of game time)
-        ├── engine_output.log   engine logs
-        ├── replay.sdfz         replay, when record_replays=True (a few hundred kB)
-        └── charts/             overview.png, then economy/, military/, units/ (same metrics, this match only)
+├── version_1/                  first run of the configuration; running it again adds version_2/, ...
+│   ├── overview.png            the six most telling charts, aggregated over all matches
+│   ├── configuration.py        copy of the configuration file used
+│   ├── summary.txt             statistics table: wins, durations, mean metal, damage, units per player
+│   ├── summary.json            the same plus every match, for later analysis
+│   ├── charts/                 all the aggregated charts
+│   │   ├── outcomes/           wins.png, durations.png
+│   │   ├── over_time/          per player over game time: median, interquartile band, one thin line per match
+│   │   │   ├── economy/        metal and energy income, spending, totals, waste, share of metal
+│   │   │   ├── military/       damage per second and totals, damage efficiency, units killed and lost
+│   │   │   ├── units/          units alive, produced, production rate
+│   │   │   └── matches_running.png
+│   │   ├── over_time_relative/ the same with time as a share of each match's duration (no survivor bias)
+│   │   └── end_of_match/       final statistics, one dot per match (all.png gathers them)
+│   └── matches/
+│       └── match_000_seed1/
+│           ├── overview.png        the six most telling charts of this match
+│           ├── script.txt          start script
+│           ├── match_result.json   winner and full statistics history (every 15 s of game time)
+│           ├── engine_output.log   engine logs
+│           ├── replay.sdfz         replay, when record_replays=True (a few hundred kB)
+│           └── charts/             economy/, military/, units/ (same metrics, this match only)
+└── version_2/ ...
 ```
 
 Everything else the engine writes in a match folder (cache, interface settings, about 5 MB) is
 deleted after the match, unless `keep_engine_files=True`.
 
-An existing `runs/<name>/` is never overwritten unless `--overwrite` is given.
+Earlier versions are never modified: a new run of the same configuration goes to the next `version_<n>/`.
 
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.

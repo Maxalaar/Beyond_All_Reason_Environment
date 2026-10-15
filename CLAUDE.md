@@ -60,7 +60,8 @@ so the environment must match its interface (to confirm).
   Playback = graphical `spring <file.sdfz>`; the demo replays our `setspeed 1000` debug command, so
   `replay.py` adds `lua/replay_widgets/replay_speed.lua` to set the speed back at frame 2.
 - After each match `_tidy_run_directory` keeps only script.txt, match_result.json, engine_output.log,
-  replay.sdfz, charts/ (unless `keep_engine_files`). Batch layout: runs/<name>/{charts,matches/<match>}.
+  replay.sdfz, charts/ (unless `keep_engine_files`). Batch layout: runs/<name>/version_<n>/{overview.png,charts/,matches/<match>/{overview.png,charts/}};
+  each run of a configuration adds a version (`new_version_directory`), nothing is overwritten.
 - Charts (`plots.py`): `METRICS` registry (name, title, category, compute from all histories); every
   metric gets one file per match and one aggregated file; overviews pick 6 (`MATCH_OVERVIEW`, `BATCH_OVERVIEW`).
   The user's key metrics are metal income, energy income and units alive (`KEY_METRICS`, top row of overviews).

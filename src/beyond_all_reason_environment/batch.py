@@ -31,7 +31,7 @@ SUMMARISED_STATISTICS = [
 class BatchConfiguration:
     """A series of matches. Configuration files in configurations/ define one, named ``configuration``."""
 
-    # Also the name of the results folder: runs/<name>/.
+    # Also the name of the results folder: runs/<name>/version_<n>/, a new version at each run.
     name: str
     players: list[ArtificialIntelligencePlayer]
     matches: int = 5
@@ -82,6 +82,24 @@ def _draw_side(player: ArtificialIntelligencePlayer, seed: int, number: int) -> 
     if isinstance(player.side, str):
         return player.side
     return random.Random(f"{seed}:{number}").choice(player.side)
+
+
+VERSION_PREFIX = "version_"
+
+
+def new_version_directory(name_directory: Path) -> Path:
+    """runs/<name>/version_<n>/ with n one more than the highest existing version, created empty.
+
+    Running a configuration again never touches earlier results: each run is a new version.
+    """
+    numbers = [
+        int(path.name.removeprefix(VERSION_PREFIX))
+        for path in name_directory.glob(f"{VERSION_PREFIX}*")
+        if path.name.removeprefix(VERSION_PREFIX).isdigit()
+    ]
+    directory = name_directory / f"{VERSION_PREFIX}{max(numbers, default=0) + 1}"
+    directory.mkdir(parents=True)
+    return directory
 
 
 def load_batch_configuration(path: Path) -> BatchConfiguration:

@@ -21,7 +21,7 @@ RESULT_FILE_NAME = "match_result.json"
 # The engine records replays into demos/<date>_<map>_<engine>.sdfz; moved to the top of the run folder.
 REPLAY_FILE_NAME = "replay.sdfz"
 # Everything else the engine writes in the run folder is deleted after the match, unless keep_engine_files.
-KEPT_FILE_NAMES = {"script.txt", "engine_output.log", RESULT_FILE_NAME, REPLAY_FILE_NAME, "charts"}
+KEPT_FILE_NAMES = {"script.txt", "engine_output.log", RESULT_FILE_NAME, REPLAY_FILE_NAME, "charts", "overview.png"}
 
 
 @dataclass

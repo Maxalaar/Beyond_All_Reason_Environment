@@ -44,7 +44,7 @@ def synthetic_batch(directory: Path) -> tuple[list[MatchConfiguration], list[Mat
 def test_batch_charts_are_written(tmp_path: Path):
     configurations, results = synthetic_batch(tmp_path)
 
-    paths = plot_batch(configurations, results, tmp_path / "charts")
+    paths = plot_batch(configurations, results, tmp_path)
 
     per_match = 1 + len(METRICS)  # overview + one chart per metric
     # outcomes, end of match, over time in minutes and relative, matches running, overview
@@ -53,6 +53,8 @@ def test_batch_charts_are_written(tmp_path: Path):
     assert all(path.exists() and path.stat().st_size > 10_000 for path in paths)
     assert (tmp_path / "matches" / "match_0" / "charts" / "military" / "units_killed.png").exists()
     assert (tmp_path / "charts" / "over_time" / "economy" / "metal_income.png").exists()
+    assert (tmp_path / "overview.png").exists()
+    assert (tmp_path / "matches" / "match_0" / "overview.png").exists()
 
 
 def test_saved_batch_loads_back(tmp_path: Path):

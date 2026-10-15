@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from beyond_all_reason_environment import ArtificialIntelligencePlayer, BatchConfiguration, MatchConfiguration
-from beyond_all_reason_environment.batch import load_batch_configuration
+from beyond_all_reason_environment.batch import load_batch_configuration, new_version_directory
 from beyond_all_reason_environment.start_script import build_start_script
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -69,3 +69,9 @@ def test_file_without_configuration_variable_is_rejected(tmp_path):
     path.write_text("x = 1\n")
     with pytest.raises(ValueError, match="configuration"):
         load_batch_configuration(path)
+
+
+def test_each_run_of_a_name_gets_a_new_version(tmp_path):
+    first, second = new_version_directory(tmp_path / "name"), new_version_directory(tmp_path / "name")
+    assert (first.name, second.name) == ("version_1", "version_2")
+    assert first.is_dir() and second.is_dir()

@@ -3,8 +3,8 @@
 Matches are recorded when record_replays=True in the configuration file (or run_match.py --record-replay).
 
 Examples:
-    python scripts/watch_replay.py runs/barb_versus_barb/matches/match_000_seed1/replay.sdfz
-    python scripts/watch_replay.py runs/barb_versus_barb/matches/match_000_seed1 --speed 5
+    python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1/replay.sdfz
+    python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5
 """
 
 import argparse
