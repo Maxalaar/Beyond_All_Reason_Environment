@@ -64,6 +64,11 @@ so the environment must match its interface (to confirm).
 - Charts (`plots.py`): `METRICS` registry (name, title, category, compute from all histories); every
   metric gets one file per match and one aggregated file; overviews pick 6 (`MATCH_OVERVIEW`, `BATCH_OVERVIEW`).
   The user's key metrics are metal income, energy income and units alive (`KEY_METRICS`, top row of overviews).
+- One color = one entry of `players` (the user wants to compare factions and, later, AIs). `side` is a faction or a
+  list (drawn per match from the seed). No side swapping: start positions are already random per seed.
+- Aggregated curves in game minutes suffer survivor bias (late values = long matches only); hence thin per-match
+  lines, the "fewer than half running" note, and `over_time_relative/` (x = share of each match's duration).
+- Legion needs mod option `experimentallegionfaction=1` (added automatically); BARb then plays it.
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
   for timeouts) and writes winner + full `Spring.GetTeamStatsHistory` per team (one entry per 15 s, cumulative).
 - Parallel: 4 matches at once run at ≈ x20 each (one alone ≈ x35); the engine uses ~2.3 cores.

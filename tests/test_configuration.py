@@ -20,11 +20,30 @@ def test_start_script_lifts_speed_limit_and_stops_at_time_limit():
     assert script.count("ShortName=BARb;") == 2
 
 
-def test_alternate_sides_swaps_every_other_match():
-    batch = BatchConfiguration(name="test", players=TWO_PLAYERS, matches=3, alternate_sides=True)
-    sides = [[player.side for player in match.players] for match in batch.match_configurations()]
-    assert sides == [["Armada", "Cortex"], ["Cortex", "Armada"], ["Armada", "Cortex"]]
-    assert [match.seed for match in batch.match_configurations()] == [1, 2, 3]
+def test_each_player_keeps_its_side_and_seeds_follow():
+    batch = BatchConfiguration(name="test", players=TWO_PLAYERS, matches=3)
+    matches = batch.match_configurations()
+    assert [[player.side for player in match.players] for match in matches] == [["Armada", "Cortex"]] * 3
+    assert [match.seed for match in matches] == [1, 2, 3]
+
+
+def test_list_of_sides_is_drawn_reproducibly_per_match():
+    players = [ArtificialIntelligencePlayer(side=["Armada", "Cortex", "Legion"]), ArtificialIntelligencePlayer()]
+    batch = BatchConfiguration(name="test", players=players, matches=30)
+    drawn = [match.players[0].side for match in batch.match_configurations()]
+    assert drawn == [match.players[0].side for match in batch.match_configurations()]
+    assert set(drawn) == {"Armada", "Cortex", "Legion"}
+
+
+def test_legion_enables_the_experimental_faction():
+    players = [ArtificialIntelligencePlayer(side="Legion"), ArtificialIntelligencePlayer(side="Cortex")]
+    assert "experimentallegionfaction=1;" in build_start_script(MatchConfiguration(players=players))
+    assert "experimentallegionfaction" not in build_start_script(MatchConfiguration())
+
+
+def test_unknown_side_is_rejected():
+    with pytest.raises(ValueError):
+        ArtificialIntelligencePlayer(side="Arm")  # pyright: ignore[reportArgumentType]
 
 
 @pytest.mark.parametrize(

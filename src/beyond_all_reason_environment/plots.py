@@ -8,6 +8,7 @@ telling ones:
     <batch folder>/charts/overview.png
     <batch folder>/charts/outcomes/{wins,durations}.png
     <batch folder>/charts/over_time/{economy,military,units}/<metric>.png, over_time/matches_running.png
+    <batch folder>/charts/over_time_relative/{economy,military,units}/<metric>.png  (x: share of match duration)
     <batch folder>/charts/end_of_match/<statistic>.png, end_of_match/all.png
 
 Players keep the same color in every chart: player 0 blue, player 1 orange (validated colorblind-safe).
@@ -253,11 +254,11 @@ def _player_label(configuration: MatchConfiguration, index: int, with_side: bool
     return f"player {index}: {player.short_name}" + (f" ({player.side})" if with_side else "")
 
 
-def _finish_time_axes(axes: Axes, metric: Metric) -> None:
+def _finish_time_axes(axes: Axes, metric: Metric, x_label: str = "game minutes") -> None:
     if metric.reference_line is not None:
         axes.axhline(metric.reference_line, color=TEXT_SECONDARY, linewidth=1, linestyle=(0, (3, 3)))
     axes.set_title(metric.title)
-    axes.set_xlabel("game minutes")
+    axes.set_xlabel(x_label)
     _style_value_axis(axes, metric.kind)
     axes.margins(x=0.08)
 
@@ -345,11 +346,24 @@ def plot_match(result: MatchResult, configuration: MatchConfiguration, directory
 # --- Aggregation over a batch -----------------------------------------------------------------------------
 
 
+def _batch_player_label(configurations: Sequence[MatchConfiguration], index: int) -> str:
+    """'player 0: BARb (Armada)', or '(Armada/Legion)' for a player whose faction was drawn from a list."""
+    sides = sorted({str(configuration.players[index].side) for configuration in configurations})
+    return f"player {index}: {configurations[0].players[index].short_name} ({'/'.join(sides)})"
+
+
 @dataclass
 class _Timeline:
-    """Common time grid of the matches of a batch, and which time steps have enough matches to aggregate."""
+    """Common x-axis of the matches of a batch: game minutes, or share of each match's duration (relative).
+
+    In minutes, matches end at different times, so late values only describe the long matches: the
+    curves stop when fewer than ``minimum_running`` matches are left. In relative time every match
+    counts at every point, from its start (0 %) to its end (100 %).
+    """
 
     played: list[MatchResult]
+    ends: list[float]  # game minutes at which each played match ended
+    relative: bool
     grid: np.ndarray
     running: np.ndarray
     minimum_running: int
@@ -358,58 +372,91 @@ class _Timeline:
     def shown(self) -> np.ndarray:
         return self.running >= self.minimum_running
 
+    @property
+    def x_label(self) -> str:
+        return "share of the match duration (0 % start, 100 % end)" if self.relative else "game minutes"
+
+    def x(self, match: int, history: list[dict]) -> np.ndarray:
+        minutes = _minutes(history)
+        return minutes / max(self.ends[match], 1e-9) if self.relative else minutes
+
     @classmethod
-    def of(cls, results: Sequence[MatchResult]) -> "_Timeline | None":
+    def of(cls, results: Sequence[MatchResult], relative: bool = False) -> "_Timeline | None":
         played = [result for result in results if any(result.team_history)]
         if not played:
             return None
         ends = [max(_minutes(history)[-1] for history in result.team_history if history) for result in played]
-        grid = np.arange(0, max(ends) + AGGREGATION_STEP_MINUTES, AGGREGATION_STEP_MINUTES)
-        running = np.array([grid <= end for end in ends]).sum(axis=0)
+        if relative:
+            grid = np.linspace(0, 1, 101)
+            running = np.full(grid.size, len(played))
+        else:
+            grid = np.arange(0, max(ends) + AGGREGATION_STEP_MINUTES, AGGREGATION_STEP_MINUTES)
+            running = np.array([grid <= end for end in ends]).sum(axis=0)
         # Below this many matches still running, the median says little: curves stop there.
-        return cls(played, grid, running, min(3, len(played)))
+        return cls(played, ends, relative, grid, running, min(3, len(played)))
+
+    def half_finished_minutes(self) -> float | None:
+        """Game minute after which fewer than half of the matches are still running."""
+        below = np.flatnonzero(self.running < len(self.played) / 2)
+        return None if self.relative or below.size == 0 else float(self.grid[below[0]])
 
 
-def _resample(minutes: np.ndarray, values: np.ndarray, grid: np.ndarray, hold_after_end: bool) -> np.ndarray:
-    """Values of one match on the common time grid; NaN where undefined and, unless ``hold_after_end``,
+def _resample(x: np.ndarray, values: np.ndarray, grid: np.ndarray, hold_after_end: bool) -> np.ndarray:
+    """Values of one match on the common grid; NaN where undefined and, unless ``hold_after_end``,
     after the match ended (np.interp holds the last value by default)."""
     finite = np.isfinite(values)
     if not finite.any():
         return np.full(grid.size, np.nan)
-    resampled = np.interp(grid, minutes[finite], values[finite])
-    resampled[grid < minutes[finite][0]] = np.nan
+    resampled = np.interp(grid, x[finite], values[finite])
+    resampled[grid < x[finite][0]] = np.nan
     if not hold_after_end:
-        resampled[grid > minutes[-1]] = np.nan
+        resampled[grid > x[-1] + 1e-9] = np.nan
     return resampled
 
 
-def _draw_batch_metric(metric: Metric, timeline: _Timeline, configuration: MatchConfiguration) -> Draw:
+def _draw_batch_metric(metric: Metric, timeline: _Timeline, configurations: Sequence[MatchConfiguration]) -> Draw:
+    """One thin line per match, then the median per player and the band from 25th to 75th percentile."""
+
     def draw(axes: Axes) -> None:
         shown, grid = timeline.shown, timeline.grid
-        for index in range(len(configuration.players)):
-            samples = np.array(
-                [
-                    _resample(
-                        _minutes(result.team_history[index]),
-                        metric.compute(result.team_history, index),
-                        grid,
-                        hold_after_end=metric.is_total,
-                    )
-                    for result in timeline.played
-                    if result.team_history[index]
-                ]
-            )
+        for index in range(len(configurations[0].players)):
+            color = PLAYER_COLORS[index]
+            samples = []
+            for match, result in enumerate(timeline.played):
+                history = result.team_history[index]
+                if not history:
+                    continue
+                x, values = timeline.x(match, history), metric.compute(result.team_history, index)
+                axes.plot(x, values, color=color, linewidth=0.7, alpha=0.3)
+                samples.append(_resample(x, values, grid, hold_after_end=metric.is_total))
             # Time steps where no match has a value give "all-NaN slice" warnings; they are hidden anyway.
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore", RuntimeWarning)
-                low, median, high = np.nanpercentile(samples, [25, 50, 75], axis=0)
-            color = PLAYER_COLORS[index]
+                low, median, high = np.nanpercentile(np.array(samples), [25, 50, 75], axis=0)
             axes.fill_between(grid[shown], low[shown], high[shown], color=color, alpha=0.15, linewidth=0)
-            axes.plot(grid[shown], median[shown], color=color, label=_player_label(configuration, index, False))
+            axes.plot(grid[shown], median[shown], color=color, label=_batch_player_label(configurations, index))
             _direct_label(axes, grid[shown], median[shown], f"player {index}", color)
-        _finish_time_axes(axes, metric)
+        _finish_time_axes(axes, metric, timeline.x_label)
+        if timeline.relative:
+            axes.xaxis.set_major_formatter(PercentFormatter(1.0))
 
     return draw
+
+
+def _aggregation_note(timeline: _Timeline) -> str:
+    note = (
+        f"{len(timeline.played)} matches. Thick line: median per player, band: 25th to 75th percentile, "
+        "thin lines: one per match."
+    )
+    if timeline.relative:
+        return note + " Time is the share of each match's duration, so every match counts at every point."
+    half = timeline.half_finished_minutes()
+    if half is not None:
+        note += (
+            f" After {half:.0f} min, fewer than half of the matches are still running:"
+            " late values only describe the long matches."
+        )
+    return note + " Totals of finished matches stay at their final value."
 
 
 def _draw_matches_running(timeline: _Timeline) -> Draw:
@@ -425,26 +472,39 @@ def _draw_matches_running(timeline: _Timeline) -> Draw:
 
 
 def _draw_wins(configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult]) -> Draw:
+    """Wins per player; for a player whose faction was drawn from a list, also its wins with each faction."""
+
     def draw(axes: Axes) -> None:
-        number_of_players = len(configurations[0].players)
-        labels = [_player_label(configurations[0], index, False) + " wins" for index in range(number_of_players)]
-        values = [sum(result.winner == index for result in results) for index in range(number_of_players)]
-        colors = PLAYER_COLORS[:number_of_players]
+        rows: list[tuple[str, int, int, str]] = []  # label, wins, matches, color
+        for index in range(len(configurations[0].players)):
+            color = PLAYER_COLORS[index]
+            wins = sum(result.winner == index for result in results)
+            rows.append((_batch_player_label(configurations, index) + " wins", wins, len(results), color))
+            sides = sorted({str(configuration.players[index].side) for configuration in configurations})
+            if len(sides) > 1:
+                for side in sides:
+                    played = [
+                        result
+                        for configuration, result in zip(configurations, results, strict=True)
+                        if configuration.players[index].side == side
+                    ]
+                    side_wins = sum(result.winner == index for result in played)
+                    rows.append((f"    as {side}", side_wins, len(played), color))
         for outcome, label in [("draw", "draws"), ("timeout", "time limit"), ("crash", "crashes")]:
-            labels.append(label)
-            values.append(sum(result.outcome == outcome for result in results))
-            colors.append(NEUTRAL_COLOR)
-        positions = np.arange(len(labels))[::-1]
-        axes.barh(positions, values, color=colors, height=0.6, edgecolor=SURFACE, linewidth=2)
-        for position, value in zip(positions, values, strict=True):
-            text = f"{value}  ({100 * value / len(results):.0f} %)"
-            axes.annotate(text, (value, position), xytext=(4, 0), textcoords="offset points", va="center")
-        axes.set_yticks(positions, labels)
+            rows.append((label, sum(result.outcome == outcome for result in results), len(results), NEUTRAL_COLOR))
+
+        positions = np.arange(len(rows))[::-1]
+        values = [wins for _, wins, _, _ in rows]
+        axes.barh(positions, values, color=[color for *_, color in rows], height=0.6, edgecolor=SURFACE, linewidth=2)
+        for position, (_, wins, matches, _) in zip(positions, rows, strict=True):
+            text = f"{wins} / {matches}  ({100 * wins / max(matches, 1):.0f} %)"
+            axes.annotate(text, (wins, position), xytext=(4, 0), textcoords="offset points", va="center")
+        axes.set_yticks(positions, [label for label, *_ in rows])
         axes.set_title(f"Outcomes of {len(results)} matches")
         axes.set_xlabel("matches")
         axes.xaxis.set_major_locator(MaxNLocator(integer=True))
         axes.grid(axis="y", visible=False)
-        axes.margins(x=0.3)
+        axes.margins(x=0.35)
 
     return draw
 
@@ -520,26 +580,18 @@ def plot_batch(
     paths.append(_save(figure, end_of_match / "all.png", title))
 
     timeline = _Timeline.of(results)
-    if timeline is None:
+    relative_timeline = _Timeline.of(results, relative=True)
+    if timeline is None or relative_timeline is None:
         return paths
-    reference = configurations[0]
-    band = (
-        f"{len(timeline.played)} matches: median per player, band from 25th to 75th percentile; curves stop when "
-        f"fewer than {timeline.minimum_running} matches are still running; totals of finished matches stay at their "
-        "final value"
-    )
-    for metric in METRICS:
-        paths.append(
-            _save_single(
-                directory / "over_time" / metric.category / f"{metric.name}.png",
-                _draw_batch_metric(metric, timeline, reference),
-                band,
-            )
-        )
+    for folder, line in [("over_time", timeline), ("over_time_relative", relative_timeline)]:
+        note = _aggregation_note(line)
+        for metric in METRICS:
+            path = directory / folder / metric.category / f"{metric.name}.png"
+            paths.append(_save_single(path, _draw_batch_metric(metric, line, configurations), note))
     paths.append(_save_single(directory / "over_time" / "matches_running.png", _draw_matches_running(timeline)))
 
-    metric_draws = [_draw_batch_metric(METRICS_BY_NAME[name], timeline, reference) for name in BATCH_OVERVIEW]
+    metric_draws = [_draw_batch_metric(METRICS_BY_NAME[name], timeline, configurations) for name in BATCH_OVERVIEW]
     overview = [*metric_draws[: len(KEY_METRICS)], _draw_wins(configurations, results), _draw_durations(results)]
     overview += metric_draws[len(KEY_METRICS) :]
-    paths.append(_save_overview(directory / "overview.png", overview, band))
+    paths.append(_save_overview(directory / "overview.png", overview, _aggregation_note(timeline)))
     return paths

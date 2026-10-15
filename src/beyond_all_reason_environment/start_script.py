@@ -8,7 +8,8 @@ from .installation import DEFAULT_MAP, GAME_VERSION
 FRAMES_PER_SECOND = 30
 MAXIMUM_ENGINE_SPEED = 1000.0
 
-Side = Literal["Armada", "Cortex"]
+Side = Literal["Armada", "Cortex", "Legion"]
+SIDES: tuple[Side, ...] = ("Armada", "Cortex", "Legion")
 
 
 @dataclass
@@ -16,11 +17,18 @@ class ArtificialIntelligencePlayer:
     """A built-in artificial intelligence, for example BARb (``short_name="BARb"``).
 
     ``short_name`` is the folder name in game_data/engine/<version>/AI/Skirmish.
+    ``side`` is one faction, or a list of factions: in a batch, each match then draws one of them
+    (reproducibly, from the match seed). A single match needs one faction.
     """
 
     short_name: str = "BARb"
     version: str = "stable"
-    side: Side = "Armada"
+    side: Side | list[Side] = "Armada"
+
+    def __post_init__(self) -> None:
+        sides = [self.side] if isinstance(self.side, str) else self.side
+        if not sides or any(side not in SIDES for side in sides):
+            raise ValueError(f"side must be one of {SIDES} or a non-empty list of them, not {self.side!r}")
 
 
 @dataclass
@@ -54,8 +62,14 @@ def build_start_script(configuration: MatchConfiguration) -> str:
     mod_options = {
         "MaxSpeed": f"{MAXIMUM_ENGINE_SPEED:g}",
         "debugcommands": f"1:setspeed {configuration.speed:g}|{maximum_frames}:quitforce",
-        **configuration.extra_mod_options,
     }
+    for player in configuration.players:
+        if not isinstance(player.side, str):
+            raise ValueError(f"a match needs one faction per player, not {player.side!r}")
+    # The third faction is still experimental in the game; BARb plays it once it is enabled.
+    if any(player.side == "Legion" for player in configuration.players):
+        mod_options["experimentallegionfaction"] = "1"
+    mod_options.update(configuration.extra_mod_options)
 
     lines = [
         "[GAME]",

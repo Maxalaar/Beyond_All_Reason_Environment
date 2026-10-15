@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import random
 import re
 import statistics
 from collections.abc import Callable
@@ -38,8 +39,6 @@ class BatchConfiguration:
     parallel: int = 4
     # Match i uses seed first_seed + i.
     first_seed: int = 1
-    # Swap the sides every other match, to cancel the faction advantage.
-    alternate_sides: bool = False
     maximum_game_minutes: float = 60.0
     map_name: str = DEFAULT_MAP
     # Save a replay of each match (a few hundred kB each), to watch with scripts/watch_replay.py.
@@ -56,25 +55,33 @@ class BatchConfiguration:
             raise ValueError("matches and parallel must be at least 1")
 
     def match_configurations(self) -> list[MatchConfiguration]:
+        """One configuration per match; players with several factions get one drawn from their list."""
         configurations = []
         for index in range(self.matches):
-            sides: list[Side] = [player.side for player in self.players]
-            if self.alternate_sides and index % 2:
-                sides.reverse()
+            seed = self.first_seed + index
             configurations.append(
                 MatchConfiguration(
                     players=[
-                        ArtificialIntelligencePlayer(player.short_name, player.version, side)
-                        for player, side in zip(self.players, sides, strict=True)
+                        ArtificialIntelligencePlayer(
+                            player.short_name, player.version, _draw_side(player, seed, number)
+                        )
+                        for number, player in enumerate(self.players)
                     ],
                     map_name=self.map_name,
-                    seed=self.first_seed + index,
+                    seed=seed,
                     maximum_game_minutes=self.maximum_game_minutes,
                     record_replay=self.record_replays,
                     keep_engine_files=self.keep_engine_files,
                 )
             )
         return configurations
+
+
+def _draw_side(player: ArtificialIntelligencePlayer, seed: int, number: int) -> Side:
+    """The player's faction in the match with this seed; the same seed always draws the same faction."""
+    if isinstance(player.side, str):
+        return player.side
+    return random.Random(f"{seed}:{number}").choice(player.side)
 
 
 def load_batch_configuration(path: Path) -> BatchConfiguration:
@@ -125,6 +132,15 @@ def _mean(values: list[float]) -> float | None:
     return statistics.fmean(values) if values else None
 
 
+def _wins_by_side(player: int, configurations: list[MatchConfiguration], results: list[MatchResult]) -> dict:
+    counts: dict[str, dict[str, int]] = {}
+    for configuration, result in zip(configurations, results, strict=True):
+        side = counts.setdefault(str(configuration.players[player].side), {"wins": 0, "matches": 0})
+        side["matches"] += 1
+        side["wins"] += result.winner == player
+    return dict(sorted(counts.items()))
+
+
 def summarise(configurations: list[MatchConfiguration], results: list[MatchResult]) -> dict:
     """Win counts, game durations and averaged team statistics, per player position."""
     finished = [result for result in results if result.game_minutes is not None]
@@ -135,8 +151,10 @@ def summarise(configurations: list[MatchConfiguration], results: list[MatchResul
         players.append(
             {
                 "name": configurations[0].players[player].short_name,
-                "sides": sorted({configuration.players[player].side for configuration in configurations}),
+                "sides": sorted({str(configuration.players[player].side) for configuration in configurations}),
                 "wins": sum(result.winner == player for result in results),
+                # {side: {"wins": ..., "matches": ...}}, for players that play several factions
+                "wins_by_side": _wins_by_side(player, configurations, results),
                 **{key: _mean([values[key] for values in played if key in values]) for key in SUMMARISED_STATISTICS},
             }
         )
@@ -178,6 +196,11 @@ def format_summary(summary: dict) -> str:
         ("sides", [" / ".join(player["sides"]) for player in players]),
         ("wins", [f"{player['wins']} ({100 * player['wins'] / summary['matches']:.0f} %)" for player in players]),
     ]
+    # One more row per faction when a player played several of them.
+    if any(len(player["wins_by_side"]) > 1 for player in players):
+        for side in sorted({side for player in players for side in player["wins_by_side"]}):
+            counts = [player["wins_by_side"].get(side) for player in players]
+            rows.append((f"wins as {side}", [f"{c['wins']} / {c['matches']}" if c else "-" for c in counts]))
     for key in SUMMARISED_STATISTICS:
         rows.append((key, ["-" if player[key] is None else f"{player[key]:,.0f}" for player in players]))
     lines += ["", "Mean per match:"]

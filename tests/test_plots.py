@@ -47,7 +47,8 @@ def test_batch_charts_are_written(tmp_path: Path):
     paths = plot_batch(configurations, results, tmp_path / "charts")
 
     per_match = 1 + len(METRICS)  # overview + one chart per metric
-    aggregated = 2 + (len(SUMMARISED_STATISTICS) + 1) + (len(METRICS) + 1) + 1  # outcomes, end, over time, overview
+    # outcomes, end of match, over time in minutes and relative, matches running, overview
+    aggregated = 2 + (len(SUMMARISED_STATISTICS) + 1) + 2 * len(METRICS) + 1 + 1
     assert len(paths) == len(results) * per_match + aggregated
     assert all(path.exists() and path.stat().st_size > 10_000 for path in paths)
     assert (tmp_path / "matches" / "match_0" / "charts" / "military" / "units_killed.png").exists()

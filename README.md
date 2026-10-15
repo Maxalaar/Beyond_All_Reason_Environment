@@ -31,7 +31,10 @@ python scripts/plot_run.py runs/barb_versus_barb          # redraw all charts of
 
 `run_matches.py` reads a Python file in `configurations/` that defines
 `configuration = BatchConfiguration(...)`: the name of the run, the players, the number of matches,
-how many run in parallel, seeds, map, time limit. Copy `barb_versus_barb.py` to start a new experiment;
+how many run in parallel, seeds, map, time limit. Each player keeps its color in every chart. Its `side` is one
+faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
+(reproducibly from the seed) and `summary.txt` gives its wins per faction. To compare factions, give
+the players different factions; to compare artificial intelligences, give them different `short_name`. Copy `barb_versus_barb.py` to start a new experiment;
 the editor completes and type-checks the fields. Results go to `runs/<name>/`:
 
 ```
@@ -42,11 +45,12 @@ runs/<name>/
 ├── charts/                     aggregated over all matches
 │   ├── overview.png            the six most telling charts on one image
 │   ├── outcomes/               wins.png, durations.png
-│   ├── over_time/              median and interquartile band per player over game time
+│   ├── over_time/              per player over game time: median, interquartile band, one thin line per match
 │   │   ├── economy/            metal and energy income, spending, totals, waste, share of metal
 │   │   ├── military/           damage per second and totals, damage efficiency, units killed and lost
 │   │   ├── units/              units alive, produced, production rate
 │   │   └── matches_running.png
+│   ├── over_time_relative/     the same with time as a share of each match's duration (no survivor bias)
 │   └── end_of_match/           final statistics, one dot per match (all.png gathers them)
 └── matches/
     └── match_000_seed1/
