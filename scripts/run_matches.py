@@ -8,8 +8,10 @@ Results go to runs/<name>/, where <name> comes from the configuration file:
     configuration.py     copy of the configuration file used
     summary.txt          the statistics table printed at the end
     summary.json         the summary and every match, for later analysis
-    plots/               charts aggregated over the matches
-    match_000_seed1/     start script, engine logs, result and chart (match.png) of each match
+    charts/              charts aggregated over the matches: overview.png, then outcomes/, over_time/, end_of_match/
+    matches/match_000_seed1/
+        script.txt, match_result.json, engine_output.log, replay.sdfz
+        charts/          overview.png, then economy/, military/, units/
 """
 
 import argparse
@@ -63,8 +65,8 @@ def main() -> None:
     summary = summarise(configurations, results)
     save_batch(batch_directory, configurations, results, summary)
     print("\n" + format_summary(summary))
-    plot_batch(configurations, results, batch_directory / "plots")
-    print(f"Saved in {batch_directory}")
+    plot_batch(configurations, results, batch_directory / "charts")
+    print(f"Saved in {batch_directory}, overview: {batch_directory / 'charts' / 'overview.png'}")
 
 
 if __name__ == "__main__":

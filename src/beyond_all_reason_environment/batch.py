@@ -10,7 +10,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 
 from .installation import DEFAULT_MAP
-from .match import MatchResult, run_match
+from .match import RESULT_FILE_NAME, MatchResult, run_match
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration, Side
 
 # Final engine statistics averaged per player in the summary.
@@ -108,7 +108,7 @@ def run_matches(
             pool.submit(
                 run_match,
                 configuration,
-                batch_directory / f"match_{index:03d}_seed{configuration.seed}",
+                batch_directory / "matches" / f"match_{index:03d}_seed{configuration.seed}",
             ): index
             for index, configuration in enumerate(configurations)
         }
@@ -193,7 +193,7 @@ def save_batch(
 ) -> None:
     """Write summary.txt (the table) and summary.json (the summary and every match, for later analysis)."""
     (batch_directory / "summary.txt").write_text(format_summary(summary))
-    # The full statistics history stays in each match folder (LuaUI/Config/match_result.json).
+    # The full statistics history stays in each match folder (match_result.json).
     matches = [
         {
             "configuration": asdict(configuration),
@@ -206,3 +206,32 @@ def save_batch(
     (batch_directory / "summary.json").write_text(
         json.dumps({"summary": summary, "matches": matches}, indent=2, default=str)
     )
+
+
+def load_batch(batch_directory: Path) -> tuple[list[MatchConfiguration], list[MatchResult]]:
+    """Read back the matches of a finished batch (summary.json and each match_result.json), to redraw charts."""
+    content = json.loads((batch_directory / "summary.json").read_text())
+    configurations, results = [], []
+    for match in content["matches"]:
+        configuration = dict(match["configuration"])
+        configuration["players"] = [ArtificialIntelligencePlayer(**player) for player in configuration["players"]]
+        configurations.append(MatchConfiguration(**configuration))
+        # Found by name, so the batch folder can be moved or copied.
+        run_directory = batch_directory / "matches" / Path(match["run_directory"]).name
+        result_path = run_directory / RESULT_FILE_NAME
+        teams = json.loads(result_path.read_text())["teams"] if result_path.exists() else {}
+        team_history = [teams.get(str(index), {}).get("history", []) for index in range(len(configuration["players"]))]
+        replay_path = match.get("replay_path")
+        results.append(
+            MatchResult(
+                outcome=match["outcome"],
+                winner=match["winner"],
+                game_frames=match["game_frames"],
+                wall_clock_seconds=match["wall_clock_seconds"],
+                run_directory=run_directory,
+                team_statistics=match["team_statistics"],
+                team_history=team_history,
+                replay_path=run_directory / Path(replay_path).name if replay_path else None,
+            )
+        )
+    return configurations, results

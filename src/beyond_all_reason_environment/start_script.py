@@ -41,7 +41,7 @@ class MatchConfiguration:
     # Save replay.sdfz in the run folder, to watch the match later with scripts/watch_replay.py.
     record_replay: bool = False
     # Keep everything the engine writes in the run folder (cache, interface settings...), for debugging.
-    # Otherwise only script.txt, match_result.json, engine_output.log, replay.sdfz and match.png remain.
+    # Otherwise only script.txt, match_result.json, engine_output.log, replay.sdfz and charts/ remain.
     keep_engine_files: bool = False
     extra_mod_options: dict[str, str] = field(default_factory=dict)
 

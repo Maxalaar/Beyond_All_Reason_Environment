@@ -61,9 +61,8 @@ def main() -> None:
         f"{result.game_minutes:.1f} game minutes in {result.wall_clock_seconds:.0f} s "
         f"(speed x{result.speed_factor:.0f}). Logs: {result.run_directory}"
     )
-    chart = plot_match(result, configuration, result.run_directory / "match.png")
-    if chart is not None:
-        print(f"Chart: {chart}")
+    if plot_match(result, configuration, result.run_directory / "charts"):
+        print(f"Charts: {result.run_directory / 'charts' / 'overview.png'} and the folders next to it")
     if result.replay_path is not None:
         print(f"Replay: python scripts/watch_replay.py {result.replay_path}")
 

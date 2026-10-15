@@ -25,7 +25,8 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
 python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
-python scripts/watch_replay.py runs/barb_versus_barb/match_000_seed1 --speed 5   # replay a recorded match
+python scripts/watch_replay.py runs/barb_versus_barb/matches/match_000_seed1 --speed 5   # replay a recorded match
+python scripts/plot_run.py runs/barb_versus_barb          # redraw all charts of a batch, no replay needed
 ```
 
 `run_matches.py` reads a Python file in `configurations/` that defines
@@ -33,18 +34,28 @@ python scripts/watch_replay.py runs/barb_versus_barb/match_000_seed1 --speed 5  
 how many run in parallel, seeds, map, time limit. Copy `barb_versus_barb.py` to start a new experiment;
 the editor completes and type-checks the fields. Results go to `runs/<name>/`:
 
-| File | Content |
-|---|---|
-| `configuration.py` | copy of the configuration file used |
-| `summary.txt` | statistics table: wins, durations, mean metal, damage and units per player |
-| `summary.json` | the same plus every match, for later analysis |
-| `plots/time_series.png` | statistics over game time: median and interquartile band per player |
-| `plots/outcomes.png` | wins per player, duration of each match |
-| `plots/final_statistics.png` | end-of-match statistics, one dot per match |
-| `match_000_seed1/match.png` | statistics over game time of that match |
-| `match_000_seed1/match_result.json` | winner and full statistics history of that match |
-| `match_000_seed1/replay.sdfz` | replay, when `record_replays=True` (a few hundred kB) |
-| `match_000_seed1/script.txt`, `engine_output.log` | start script and engine logs |
+```
+runs/<name>/
+├── configuration.py            copy of the configuration file used
+├── summary.txt                 statistics table: wins, durations, mean metal, damage, units per player
+├── summary.json                the same plus every match, for later analysis
+├── charts/                     aggregated over all matches
+│   ├── overview.png            the six most telling charts on one image
+│   ├── outcomes/               wins.png, durations.png
+│   ├── over_time/              median and interquartile band per player over game time
+│   │   ├── economy/            metal and energy income, spending, totals, waste, share of metal
+│   │   ├── military/           damage per second and totals, damage efficiency, units killed and lost
+│   │   ├── units/              units alive, produced, production rate
+│   │   └── matches_running.png
+│   └── end_of_match/           final statistics, one dot per match (all.png gathers them)
+└── matches/
+    └── match_000_seed1/
+        ├── script.txt          start script
+        ├── match_result.json   winner and full statistics history (every 15 s of game time)
+        ├── engine_output.log   engine logs
+        ├── replay.sdfz         replay, when record_replays=True (a few hundred kB)
+        └── charts/             overview.png, then economy/, military/, units/ (same metrics, this match only)
+```
 
 Everything else the engine writes in a match folder (cache, interface settings, about 5 MB) is
 deleted after the match, unless `keep_engine_files=True`.

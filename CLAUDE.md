@@ -60,7 +60,9 @@ so the environment must match its interface (to confirm).
   Playback = graphical `spring <file.sdfz>`; the demo replays our `setspeed 1000` debug command, so
   `replay.py` adds `lua/replay_widgets/replay_speed.lua` to set the speed back at frame 2.
 - After each match `_tidy_run_directory` keeps only script.txt, match_result.json, engine_output.log,
-  replay.sdfz, match.png (unless `keep_engine_files`).
+  replay.sdfz, charts/ (unless `keep_engine_files`). Batch layout: runs/<name>/{charts,matches/<match>}.
+- Charts (`plots.py`): `METRICS` registry (name, title, category, compute from all histories); every
+  metric gets one file per match and one aggregated file; overviews pick 6 (`MATCH_OVERVIEW`, `BATCH_OVERVIEW`).
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
   for timeouts) and writes winner + full `Spring.GetTeamStatsHistory` per team (one entry per 15 s, cumulative).
 - Parallel: 4 matches at once run at ≈ x20 each (one alone ≈ x35); the engine uses ~2.3 cores.
