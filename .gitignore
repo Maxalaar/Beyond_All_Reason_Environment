@@ -23,6 +23,7 @@ result-*
 *.log
 .vscode/*
 !.vscode/settings.json
+!.vscode/extensions.json
 .idea/
 *.swp
 .DS_Store

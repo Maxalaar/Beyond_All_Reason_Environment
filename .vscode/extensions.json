@@ -1,0 +1,12 @@
+{
+    // Installed through the NixOS configuration (vscode_shared.nix); listed here for other machines.
+    "recommendations": [
+        "ms-python.python",
+        "ms-python.debugpy",
+        "detachhead.basedpyright",
+        "charliermarsh.ruff",
+        "redhat.vscode-yaml",
+        "tamasfe.even-better-toml",
+        "sumneko.lua"
+    ]
+}
