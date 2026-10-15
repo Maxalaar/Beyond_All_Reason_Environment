@@ -5,7 +5,24 @@ reference/
 # One folder per launched match: logs, start script, results
 runs/
 
+# Python
 __pycache__/
+*.py[cod]
 *.egg-info/
 .venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Nix
 result
+result-*
+.direnv/
+
+# Logs and editor leftovers
+*.log
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.swp
+.DS_Store

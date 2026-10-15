@@ -1,0 +1,20 @@
+{
+    // Do not treat the read-only clones in reference/ as repositories of this project.
+    "git.repositoryScanIgnoredFolders": ["reference", "game_data", "runs"],
+    "git.autoRepositoryDetection": "openEditors",
+    // game_data/ holds thousands of files and several GB: keep it out of the explorer, search and file watcher.
+    "files.exclude": {
+        "game_data": true,
+        "**/__pycache__": true
+    },
+    "files.watcherExclude": {
+        "**/game_data/**": true,
+        "**/reference/**": true,
+        "**/runs/**": true
+    },
+    "search.exclude": {
+        "game_data": true,
+        "reference": true,
+        "runs": true
+    }
+}
