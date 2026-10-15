@@ -1,18 +1,17 @@
-"""Run several matches in parallel, described by a YAML configuration file, and summarise them."""
+"""Run several matches in parallel, described by a Python configuration file, and summarise them."""
 
+import importlib.util
 import json
 import re
 import statistics
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, fields
+from dataclasses import asdict, dataclass
 from pathlib import Path
-
-import yaml
 
 from .installation import DEFAULT_MAP
 from .match import MatchResult, run_match
-from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
+from .start_script import ArtificialIntelligencePlayer, MatchConfiguration, Side
 
 # Final engine statistics averaged per player in the summary.
 SUMMARISED_STATISTICS = [
@@ -29,49 +28,60 @@ SUMMARISED_STATISTICS = [
 
 @dataclass
 class BatchConfiguration:
-    """Content of a configuration file in configurations/ (see barb_versus_barb.yaml)."""
+    """A series of matches. Configuration files in configurations/ define one, named ``configuration``."""
 
     # Also the name of the results folder: runs/<name>/.
     name: str
     players: list[ArtificialIntelligencePlayer]
     matches: int = 5
+    # Matches at the same time, about 5 GB of memory each.
     parallel: int = 4
+    # Match i uses seed first_seed + i.
     first_seed: int = 1
+    # Swap the sides every other match, to cancel the faction advantage.
     alternate_sides: bool = False
     maximum_game_minutes: float = 60.0
     map_name: str = DEFAULT_MAP
 
+    def __post_init__(self) -> None:
+        if not re.fullmatch(r"[A-Za-z0-9_-]+", self.name):
+            raise ValueError(f"name {self.name!r} may only contain letters, digits, _ and -")
+        if len(self.players) < 2:
+            raise ValueError("at least two players are needed")
+        if self.matches < 1 or self.parallel < 1:
+            raise ValueError("matches and parallel must be at least 1")
+
     def match_configurations(self) -> list[MatchConfiguration]:
         configurations = []
         for index in range(self.matches):
-            sides = [player.side for player in self.players]
+            sides: list[Side] = [player.side for player in self.players]
             if self.alternate_sides and index % 2:
                 sides.reverse()
-            configurations.append(MatchConfiguration(
-                players=[
-                    ArtificialIntelligencePlayer(player.short_name, player.version, side)
-                    for player, side in zip(self.players, sides)
-                ],
-                map_name=self.map_name,
-                seed=self.first_seed + index,
-                maximum_game_minutes=self.maximum_game_minutes,
-            ))
+            configurations.append(
+                MatchConfiguration(
+                    players=[
+                        ArtificialIntelligencePlayer(player.short_name, player.version, side)
+                        for player, side in zip(self.players, sides, strict=True)
+                    ],
+                    map_name=self.map_name,
+                    seed=self.first_seed + index,
+                    maximum_game_minutes=self.maximum_game_minutes,
+                )
+            )
         return configurations
 
 
 def load_batch_configuration(path: Path) -> BatchConfiguration:
-    """Read a YAML configuration file; unknown keys are errors, to catch typos."""
-    content = yaml.safe_load(Path(path).read_text())
-    allowed = {item.name for item in fields(BatchConfiguration)}
-    unknown = set(content) - allowed
-    if unknown:
-        raise ValueError(f"{path}: unknown keys {sorted(unknown)}, allowed: {sorted(allowed)}")
-    if not re.fullmatch(r"[A-Za-z0-9_-]+", str(content.get("name", ""))):
-        raise ValueError(f"{path}: 'name' is required and may only contain letters, digits, _ and -")
-    content["players"] = [ArtificialIntelligencePlayer(**player) for player in content.get("players", [])]
-    if len(content["players"]) < 2:
-        raise ValueError(f"{path}: at least two players are needed")
-    return BatchConfiguration(**content)
+    """Execute a configuration file and return its ``configuration`` variable."""
+    specification = importlib.util.spec_from_file_location(f"configuration_{Path(path).stem}", path)
+    if specification is None or specification.loader is None:
+        raise ValueError(f"{path} is not a Python file")
+    module = importlib.util.module_from_spec(specification)
+    specification.loader.exec_module(module)
+    configuration = getattr(module, "configuration", None)
+    if not isinstance(configuration, BatchConfiguration):
+        raise ValueError(f"{path} must define `configuration = BatchConfiguration(...)`")
+    return configuration
 
 
 def run_matches(
@@ -98,10 +108,11 @@ def run_matches(
         }
         for future in as_completed(futures):
             index = futures[future]
-            results[index] = future.result()
+            result = future.result()
+            results[index] = result
             if on_result is not None:
-                on_result(index, results[index])
-    return results
+                on_result(index, result)
+    return [result for result in results if result is not None]  # all filled once the pool is done
 
 
 def _mean(values: list[float]) -> float | None:
@@ -115,16 +126,15 @@ def summarise(configurations: list[MatchConfiguration], results: list[MatchResul
     players = []
     for player in range(number_of_players):
         played = [result.team_statistics[player] for result in finished if result.team_statistics]
-        players.append({
-            "name": configurations[0].players[player].short_name,
-            "sides": sorted({configuration.players[player].side for configuration in configurations}),
-            "wins": sum(result.winner == player for result in results),
-            **{
-                key: _mean([values[key] for values in played if key in values])
-                for key in SUMMARISED_STATISTICS
-            },
-        })
-    durations = [result.game_minutes for result in finished]
+        players.append(
+            {
+                "name": configurations[0].players[player].short_name,
+                "sides": sorted({configuration.players[player].side for configuration in configurations}),
+                "wins": sum(result.winner == player for result in results),
+                **{key: _mean([values[key] for values in played if key in values]) for key in SUMMARISED_STATISTICS},
+            }
+        )
+    durations = [result.game_minutes for result in finished if result.game_minutes is not None]
     return {
         "matches": len(results),
         "outcomes": {
@@ -137,7 +147,7 @@ def summarise(configurations: list[MatchConfiguration], results: list[MatchResul
             "minimum": min(durations, default=None),
             "maximum": max(durations, default=None),
         },
-        "mean_speed_factor": _mean([result.speed_factor for result in finished]),
+        "mean_speed_factor": _mean([result.speed_factor for result in finished if result.speed_factor is not None]),
     }
 
 
@@ -177,8 +187,13 @@ def save_batch(
 ) -> None:
     """Write summary.txt (the table) and summary.json (the summary and every match, for later analysis)."""
     (batch_directory / "summary.txt").write_text(format_summary(summary))
+    # The full statistics history stays in each match folder (LuaUI/Config/match_result.json).
     matches = [
-        {"configuration": asdict(configuration), **asdict(result), "run_directory": str(result.run_directory)}
-        for configuration, result in zip(configurations, results)
+        {
+            "configuration": asdict(configuration),
+            **{key: value for key, value in asdict(result).items() if key != "team_history"},
+            "run_directory": str(result.run_directory),
+        }
+        for configuration, result in zip(configurations, results, strict=True)
     ]
     (batch_directory / "summary.json").write_text(json.dumps({"summary": summary, "matches": matches}, indent=2))

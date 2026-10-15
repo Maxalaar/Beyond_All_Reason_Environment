@@ -31,8 +31,9 @@ so the environment must match its interface (to confirm).
 
 ## Roadmap (start small)
 - [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (BARb vs BARb headless → winner,
-      `--graphical` to watch), `scripts/run_matches.py configurations/<file>.yaml`
-      (parallel batch + statistics into `runs/<name>/`, `batch.py`).
+      `--graphical` to watch), `scripts/run_matches.py configurations/<file>.py`
+      (Python file defining `configuration = BatchConfiguration(...)`; parallel batch, statistics and
+      charts into `runs/<name>/`; `batch.py`, `plots.py`).
 - [ ] Step 1: Lua widget/gadget dumps game state (units: pos, hp, team; team
       resources) to JSON every N frames.
 - [ ] Step 2: 2D viewer (top-down map, team colours, time slider, resource curves).
@@ -53,8 +54,10 @@ so the environment must match its interface (to confirm).
 - Graphical mode (`--graphical`, binary `spring`): needs SDL2/X11/OpenAL from `flake.nix`
   (`BEYOND_ALL_REASON_GRAPHICS_LIBRARY_PATH`). Default renderer is the Intel iGPU (≈ x5 max);
   with NVIDIA PRIME offload variables + `SDL_VIDEODRIVER=x11` it uses the RTX (x10 reached).
+- Checks: `ruff format`, `ruff check`, `basedpyright --pythonpath <env>/bin/python`, `pytest` (tests/ never start
+  the engine). Charts: matplotlib, player colors fixed by position (blue, orange...).
 - The engine logs no winner; `match_result_reporter.lua` hooks `widget:GameOver` (and `Shutdown`
-  for timeouts) and writes winner + final `Spring.GetTeamStatsHistory` entry per team.
+  for timeouts) and writes winner + full `Spring.GetTeamStatsHistory` per team (one entry per 15 s, cumulative).
 - Parallel: 4 matches at once run at ≈ x20 each (one alone ≈ x35); the engine uses ~2.3 cores.
 - BARb vs BARb is NOT reproducible with the same `FixedRNGSeed` (55, 33, 46 min, timeout).
   Probably BARb itself (threads/timing); to investigate before relying on seeds.

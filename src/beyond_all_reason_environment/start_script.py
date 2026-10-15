@@ -1,20 +1,26 @@
 """Generate the engine start script ("script.txt") that describes a match."""
 
 from dataclasses import dataclass, field
+from typing import Literal
 
 from .installation import DEFAULT_MAP, GAME_VERSION
 
 FRAMES_PER_SECOND = 30
 MAXIMUM_ENGINE_SPEED = 1000.0
 
+Side = Literal["Armada", "Cortex"]
+
 
 @dataclass
 class ArtificialIntelligencePlayer:
-    """A built-in artificial intelligence, for example BARb (``short_name="BARb"``)."""
+    """A built-in artificial intelligence, for example BARb (``short_name="BARb"``).
+
+    ``short_name`` is the folder name in game_data/engine/<version>/AI/Skirmish.
+    """
 
     short_name: str = "BARb"
     version: str = "stable"
-    side: str = "Armada"  # Armada or Cortex
+    side: Side = "Armada"
 
 
 @dataclass

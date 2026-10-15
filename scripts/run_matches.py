@@ -1,14 +1,15 @@
 """Run the matches described by a configuration file, in parallel and without graphics, then print statistics.
 
 Examples:
-    python scripts/run_matches.py configurations/barb_versus_barb.yaml
-    python scripts/run_matches.py configurations/barb_versus_barb.yaml --overwrite
+    python scripts/run_matches.py configurations/barb_versus_barb.py
+    python scripts/run_matches.py configurations/barb_versus_barb.py --overwrite
 
 Results go to runs/<name>/, where <name> comes from the configuration file:
-    configuration.yaml   copy of the configuration file used
+    configuration.py     copy of the configuration file used
     summary.txt          the statistics table printed at the end
     summary.json         the summary and every match, for later analysis
-    match_000_seed1/     start script, engine logs and result of each match
+    plots/               charts aggregated over the matches
+    match_000_seed1/     start script, engine logs, result and chart (match.png) of each match
 """
 
 import argparse
@@ -24,18 +25,22 @@ from beyond_all_reason_environment.batch import (
     summarise,
 )
 from beyond_all_reason_environment.match import RUNS_DIRECTORY, MatchResult
+from beyond_all_reason_environment.plots import plot_batch
 
 
 def describe(result: MatchResult) -> str:
     if result.outcome == "crash":
         return f"crash, see {result.run_directory / 'engine_output.log'}"
     winner = f"player {result.winner} wins" if result.outcome == "victory" else result.outcome
-    return f"{winner:<14} {result.game_minutes:5.1f} game min  {result.wall_clock_seconds:4.0f} s  x{result.speed_factor:.0f}"
+    return (
+        f"{winner:<14} {result.game_minutes:5.1f} game min  "
+        f"{result.wall_clock_seconds:4.0f} s  x{result.speed_factor:.0f}"
+    )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("configuration", type=Path, help="YAML file, see configurations/")
+    parser.add_argument("configuration", type=Path, help="Python configuration file, see configurations/")
     parser.add_argument("--overwrite", action="store_true", help="delete runs/<name>/ if it already exists")
     arguments = parser.parse_args()
 
@@ -46,7 +51,7 @@ def main() -> None:
             sys.exit(f"{batch_directory} already exists: change 'name' in the configuration, or add --overwrite.")
         shutil.rmtree(batch_directory)
     batch_directory.mkdir(parents=True)
-    shutil.copy(arguments.configuration, batch_directory / "configuration.yaml")
+    shutil.copy(arguments.configuration, batch_directory / "configuration.py")
 
     configurations = batch.match_configurations()
     print(f"{batch.name}: {batch.matches} matches, {batch.parallel} at a time, in {batch_directory}")
@@ -58,6 +63,7 @@ def main() -> None:
     summary = summarise(configurations, results)
     save_batch(batch_directory, configurations, results, summary)
     print("\n" + format_summary(summary))
+    plot_batch(configurations, results, batch_directory / "plots")
     print(f"Saved in {batch_directory}")
 
 

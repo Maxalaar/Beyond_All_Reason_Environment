@@ -1,4 +1,4 @@
--- Writes the outcome and final team statistics to LuaUI/Config/match_result.json:
+-- Writes the outcome and the team statistics history to LuaUI/Config/match_result.json:
 -- when the game ends (then quits right away when running without graphics),
 -- or when the engine shuts down without a winner (maximum game time reached).
 -- Copied into LuaUI/Widgets of each run folder by match.py; user widgets are allowed for spectators,
@@ -17,23 +17,18 @@ local RESULT_PATH = "LuaUI/Config/match_result.json"
 
 local resultWritten = false
 
--- Last entry of the engine statistics history (metalProduced, damageDealt, unitsKilled...).
--- The engine records an entry every 16 seconds of game time, so values can lag slightly behind.
+-- Full engine statistics history of each team: one entry every 16 seconds of game time, with
+-- cumulative values (metalProduced, damageDealt, unitsKilled...), plus the units alive at the end.
 local function teamStatistics()
 	local statistics = {}
 	local gaiaTeamID = Spring.GetGaiaTeamID()
 	for _, teamID in ipairs(Spring.GetTeamList()) do
 		if teamID ~= gaiaTeamID then
-			local values = {}
-			local count = Spring.GetTeamStatsHistory(teamID)
-			if count and count > 0 then
-				local history = Spring.GetTeamStatsHistory(teamID, count, count)
-				for key, value in pairs(history[1]) do
-					values[key] = value
-				end
-			end
-			values.unitsAlive = Spring.GetTeamUnitCount(teamID)
-			statistics[tostring(teamID)] = values
+			local count = Spring.GetTeamStatsHistory(teamID) or 0
+			statistics[tostring(teamID)] = {
+				history = count > 0 and Spring.GetTeamStatsHistory(teamID, 1, count) or {},
+				unitsAlive = Spring.GetTeamUnitCount(teamID),
+			}
 		end
 	end
 	return statistics

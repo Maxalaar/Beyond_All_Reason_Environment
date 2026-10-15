@@ -9,6 +9,7 @@ import argparse
 
 from beyond_all_reason_environment import ArtificialIntelligencePlayer, MatchConfiguration, run_match
 from beyond_all_reason_environment.installation import DEFAULT_MAP
+from beyond_all_reason_environment.plots import plot_match
 
 
 def main() -> None:
@@ -20,7 +21,9 @@ def main() -> None:
     parser.add_argument("--maximum-game-minutes", type=float, default=60.0)
     parser.add_argument("--graphical", action="store_true", help="open a window to watch the match")
     parser.add_argument(
-        "--speed", type=float, default=None,
+        "--speed",
+        type=float,
+        default=None,
         help="multiple of real time (default: 1 with --graphical, as fast as possible without)",
     )
     arguments = parser.parse_args()
@@ -43,7 +46,7 @@ def main() -> None:
     if result.outcome == "crash":
         print(f"No result (crash or window closed). Logs: {result.run_directory / 'engine_output.log'}")
         return
-    if result.outcome == "victory":
+    if result.outcome == "victory" and result.winner is not None:
         player = configuration.players[result.winner]
         print(f"Winner: player {result.winner} ({player.short_name}, {player.side})")
     else:
@@ -52,6 +55,9 @@ def main() -> None:
         f"{result.game_minutes:.1f} game minutes in {result.wall_clock_seconds:.0f} s "
         f"(speed x{result.speed_factor:.0f}). Logs: {result.run_directory}"
     )
+    chart = plot_match(result, configuration, result.run_directory / "match.png")
+    if chart is not None:
+        print(f"Chart: {chart}")
 
 
 if __name__ == "__main__":

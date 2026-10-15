@@ -3,7 +3,11 @@ name = "beyond-all-reason-environment"
 version = "0.1.0"
 description = "Headless test harness and reinforcement learning environment for Beyond All Reason"
 requires-python = ">=3.11"
-dependencies = ["pyyaml>=6"]
+dependencies = ["matplotlib>=3.8"]
+
+[project.optional-dependencies]
+# pip install -e ".[development]"
+development = ["ruff", "basedpyright", "pytest"]
 
 [build-system]
 requires = ["setuptools>=68"]
@@ -14,3 +18,18 @@ where = ["src"]
 
 [tool.setuptools.package-data]
 beyond_all_reason_environment = ["lua/**/*.lua"]
+
+[tool.ruff]
+src = ["src"]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+# pycodestyle, pyflakes, import order, pyupgrade, bugbear, simplifications
+select = ["E", "F", "I", "UP", "B", "SIM"]
+
+[tool.basedpyright]
+include = ["src", "scripts", "configurations", "tests"]
+exclude = ["game_data", "reference", "runs"]
+typeCheckingMode = "standard"
+pythonVersion = "3.13"

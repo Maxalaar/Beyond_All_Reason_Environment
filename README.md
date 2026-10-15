@@ -24,21 +24,38 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 ```bash
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
-python scripts/run_matches.py configurations/barb_versus_barb.yaml   # several matches, then statistics
+python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
 ```
 
-`run_matches.py` reads everything from a YAML file in `configurations/`: the name of the run, the
-players, the number of matches, how many run in parallel, seeds, map, time limit. Copy
-`barb_versus_barb.yaml` to start a new experiment. Results go to `runs/<name>/`:
+`run_matches.py` reads a Python file in `configurations/` that defines
+`configuration = BatchConfiguration(...)`: the name of the run, the players, the number of matches,
+how many run in parallel, seeds, map, time limit. Copy `barb_versus_barb.py` to start a new experiment;
+the editor completes and type-checks the fields. Results go to `runs/<name>/`:
 
 | File | Content |
 |---|---|
-| `configuration.yaml` | copy of the configuration file used |
+| `configuration.py` | copy of the configuration file used |
 | `summary.txt` | statistics table: wins, durations, mean metal, damage and units per player |
 | `summary.json` | the same plus every match, for later analysis |
-| `match_000_seed1/` … | start script, engine logs and result of each match |
+| `plots/time_series.png` | statistics over game time: median and interquartile band per player |
+| `plots/outcomes.png` | wins per player, duration of each match |
+| `plots/final_statistics.png` | end-of-match statistics, one dot per match |
+| `match_000_seed1/match.png` | statistics over game time of that match |
+| `match_000_seed1/` | also its start script and engine logs |
 
 An existing `runs/<name>/` is never overwritten unless `--overwrite` is given.
 
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.
+
+## Development
+
+```bash
+pip install -e ".[development]"   # ruff, basedpyright, pytest
+ruff format . && ruff check .     # formatting and linting (also on save in VSCodium)
+basedpyright                      # type checking
+pytest                            # fast tests, the game engine is not started
+```
+
+VSCodium extensions: Python, basedpyright, Ruff, YAML, Even Better TOML and Lua, listed in
+`.vscode/extensions.json`; settings in `.vscode/settings.json` and `pyproject.toml`.

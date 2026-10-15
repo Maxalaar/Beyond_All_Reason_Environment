@@ -31,6 +31,9 @@ class MatchResult:
     # One dictionary per player, in the order of MatchConfiguration.players: final engine statistics
     # (metalProduced, damageDealt, unitsKilled...) and units alive at the end (unitsAlive).
     team_statistics: list[dict] = field(default_factory=list)
+    # One list per player: engine statistics every 16 seconds of game time, cumulative values,
+    # with "time" in seconds. Used by plots.py.
+    team_history: list[list[dict]] = field(default_factory=list, repr=False)
 
     @property
     def game_minutes(self) -> float | None:
@@ -132,8 +135,12 @@ def run_match(
     result = json.loads(result_path.read_text())
 
     # Each player has its own team and ally team, both numbered like the players.
-    statistics_by_team = {int(team): values for team, values in result["teams"].items()}
-    team_statistics = [statistics_by_team.get(index, {}) for index in range(len(configuration.players))]
+    teams = {int(team): values for team, values in result["teams"].items()}
+    team_history = [teams[index]["history"] if index in teams else [] for index in range(len(configuration.players))]
+    team_statistics = [
+        {**(history[-1] if history else {}), "unitsAlive": teams[index]["unitsAlive"]} if index in teams else {}
+        for index, history in enumerate(team_history)
+    ]
     winners = result["winning_ally_teams"]
     if not result["game_over"]:
         outcome, winner = "timeout", None
@@ -141,4 +148,6 @@ def run_match(
         outcome, winner = "victory", winners[0]
     else:
         outcome, winner = "draw", None
-    return MatchResult(outcome, winner, result["frame"], wall_clock_seconds, run_directory, team_statistics)
+    return MatchResult(
+        outcome, winner, result["frame"], wall_clock_seconds, run_directory, team_statistics, team_history
+    )
