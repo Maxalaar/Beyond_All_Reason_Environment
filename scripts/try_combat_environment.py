@@ -1,13 +1,13 @@
-"""Play a few episodes of the micro environment with a simple policy, to check it and measure its speed.
+"""Play a few episodes of the combat environment with a simple policy, to check it and measure its speed.
 
 Policies:
     random    each agent picks an allowed command and a random point of the map
     attack    each agent clicks "attack" on the nearest enemy (should win against a passive opponent)
 
 Examples:
-    python scripts/try_micro_environment.py --policy attack --episodes 5
-    python scripts/try_micro_environment.py --policy random --opponent hold_and_fire
-    python scripts/try_micro_environment.py --policy attack --graphical --speed 2   # watch it
+    python scripts/try_combat_environment.py --policy attack --episodes 5
+    python scripts/try_combat_environment.py --policy random --opponent hold_and_fire
+    python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
 """
 
 import argparse
@@ -15,8 +15,8 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment.micro_configuration import COMMANDS, MicroScenarioConfiguration
-from beyond_all_reason_environment.micro_environment import MicroEnvironment, entity_feature_names
+from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
+from beyond_all_reason_environment.combat_environment import CombatEnvironment, entity_feature_names
 
 ATTACK = COMMANDS.index("attack")
 
@@ -47,7 +47,7 @@ def main() -> None:
     parser.add_argument("--keep-run-directory", action="store_true", help="keep the engine log after the run")
     arguments = parser.parse_args()
 
-    configuration = MicroScenarioConfiguration(
+    configuration = CombatConfiguration(
         opponent_behaviour=arguments.opponent,
         graphical=arguments.graphical,
         speed=arguments.speed or (1.0 if arguments.graphical else 1000.0),
@@ -56,7 +56,7 @@ def main() -> None:
     feature_names = entity_feature_names(configuration)
     random = np.random.default_rng(arguments.seed)
     start = time.monotonic()
-    with MicroEnvironment(configuration) as environment:
+    with CombatEnvironment(configuration) as environment:
         steps = 0
         for episode in range(arguments.episodes):
             observations, informations = environment.reset(seed=arguments.seed + episode)

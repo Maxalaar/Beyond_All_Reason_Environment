@@ -1,20 +1,13 @@
-"""Settings of the micro environment: a small fight between two groups of units (see micro_environment.py)."""
+"""Configuration for combat environments: unit fights with no production or resource gathering."""
 
 from dataclasses import dataclass, field
 from typing import Literal
 
-from .installation import DEFAULT_MAP
+from .environment_configuration import EnvironmentConfiguration
 
 # Every command an agent may give, in the order of the action index. A unit type only gets the ones listed for it
-# in MicroScenarioConfiguration.commands; the others are masked.
+# in CombatConfiguration.commands; the others are masked.
 COMMANDS = ("continue", "move", "fight", "attack", "stop")
-
-# The engine server may simulate up to 30 frames ahead of the local client, and orders from Lua travel through it,
-# so an order sent at frame F reaches the simulation by F + 30 at the latest: delaying every action by more than
-# that makes its timing exact (see reinforcement_learning_scenario.lua).
-MAXIMUM_SERVER_LEAD_FRAMES = 30
-
-FRAMES_PER_SECOND = 30
 
 # Fire states: 0 hold fire, 1 return fire, 2 fire at will. Move states: 0 hold position, 1 manoeuvre, 2 roam.
 FIRE_AT_WILL, HOLD_FIRE = 2, 0
@@ -38,11 +31,13 @@ class RewardWeights:
 
 
 @dataclass
-class MicroScenarioConfiguration:
-    map_name: str = DEFAULT_MAP
+class CombatConfiguration(EnvironmentConfiguration):
+    """Configuration for a combat-only environment: two groups of units fight until one side is eliminated."""
+
     # Unit name -> number of units. Agents are team 0, the opponent team 1.
     agent_units: dict[str, int] = field(default_factory=lambda: {"armpw": 5})
     opponent_units: dict[str, int] = field(default_factory=lambda: {"armpw": 5})
+    # passive: does not move, does not shoot. hold_and_fire: does not move, shoots what comes in range.
     opponent_behaviour: Literal["passive", "hold_and_fire"] = "passive"
 
     # Spawn: both groups centred on the map centre, apart along x, spread along z (fractions of the map).
@@ -50,23 +45,20 @@ class MicroScenarioConfiguration:
     group_spread: float = 0.06
     spawn_jitter: float = 0.01
 
-    maximum_episode_seconds: float = 60.0
-    # An agent decides every decision_interval_frames; its action reaches the units action_delay_frames later.
-    # With both equal, each action starts exactly at the next decision, which then observes it as the unit's order.
-    decision_interval_frames: int = 32
-    action_delay_frames: int = 32
-
-    # Observation: the nearest entities each agent sees.
-    maximum_entities_seen: int = 16
-
-    # Both teams see the whole map. Observations show every unit, and the engine only lets a unit attack what its
-    # team sees: without it, "attack" on a unit beyond sight range is dropped.
-    full_vision: bool = True
-
     # Commands allowed per unit name; "default" for the other units.
     commands: dict[str, list[str]] = field(default_factory=lambda: {"default": list(COMMANDS)})
-    # "attack" targets the enemy nearest to the clicked point within this radius (game units), otherwise it is ignored.
+    # "attack" targets the enemy nearest to the clicked point within this radius (game units), otherwise ignored.
     attack_snap_radius: float = 60.0
+
+    # Observation: separate entity lists, each taking the nearest units up to the given count.
+    maximum_ally_units: int = 4
+    maximum_enemy_units: int = 8
+    maximum_ally_buildings: int = 0
+    maximum_enemy_buildings: int = 0
+    # Weapon slots per entity (up to this many weapon tokens, padded).
+    maximum_weapons_per_unit: int = 4
+    # Number of BAR armor types (14 in the current game version).
+    num_armor_types: int = 14
 
     rewards: RewardWeights = field(default_factory=RewardWeights)
 
@@ -75,17 +67,8 @@ class MicroScenarioConfiguration:
     agent_fire_state: int = FIRE_AT_WILL
     agent_move_state: int = MANOEUVRE
 
-    # Engine: as fast as possible without graphics; with graphical=True a window shows the episodes at speed.
-    graphical: bool = False
-    speed: float = 1000.0
-    # Keep runs/micro_environments/<run>/ (start script, engine log) after close(), for debugging.
-    keep_run_directory: bool = False
-
     def __post_init__(self) -> None:
-        if self.action_delay_frames <= MAXIMUM_SERVER_LEAD_FRAMES:
-            raise ValueError(f"action_delay_frames must be above {MAXIMUM_SERVER_LEAD_FRAMES} for exact timing")
-        if self.decision_interval_frames < 1:
-            raise ValueError("decision_interval_frames must be at least 1")
+        super().__post_init__()
         for unit, allowed in self.commands.items():
             unknown = set(allowed) - set(COMMANDS)
             if unknown:
@@ -104,7 +87,3 @@ class MicroScenarioConfiguration:
 
     def allowed_commands(self, unit_name: str) -> list[str]:
         return self.commands.get(unit_name, self.commands.get("default", list(COMMANDS)))
-
-    @property
-    def maximum_episode_frames(self) -> int:
-        return int(self.maximum_episode_seconds * FRAMES_PER_SECOND)

@@ -23,6 +23,9 @@ ENGINE_DIRECTORY = GAME_DATA_DIRECTORY / "engine" / f"recoil_{ENGINE_VERSION}"
 HEADLESS_EXECUTABLE = ENGINE_DIRECTORY / "spring-headless"
 GRAPHICAL_EXECUTABLE = ENGINE_DIRECTORY / "spring"
 
+BRIDGE_AI_SOURCE_DIRECTORY = Path(__file__).parent / "bridge_ai"
+BRIDGE_AI_INSTALL_DIRECTORY = ENGINE_DIRECTORY / "AI" / "Skirmish" / "BridgeAI" / "0.1"
+
 ENGINE_URL = (
     "https://github.com/beyond-all-reason/RecoilEngine/releases/download/"
     f"{ENGINE_VERSION}/recoil_{ENGINE_VERSION}_amd64-linux.7z"
@@ -34,6 +37,39 @@ PR_DOWNLOADER_ENVIRONMENT = {
     "PRD_RAPID_REPO_MASTER": "https://repos-cdn.beyondallreason.dev/repos.gz",
     "PRD_HTTP_SEARCH_URL": "https://files-cdn.beyondallreason.dev/find",
 }
+
+
+def build_bridge_ai() -> None:
+    """Compile bridge_ai.c into libSkirmishAI.so and install it alongside NullAI."""
+    target = BRIDGE_AI_INSTALL_DIRECTORY / "libSkirmishAI.so"
+    source = BRIDGE_AI_SOURCE_DIRECTORY / "bridge_ai.c"
+    if target.exists() and target.stat().st_mtime >= source.stat().st_mtime:
+        return
+    print("Compiling BridgeAI...")
+    gcc = ["gcc"] if shutil.which("gcc") else ["nix", "shell", "nixpkgs#gcc", "--command", "gcc"]
+    # Compile directly without make to avoid needing make in PATH.
+    interface_dir = REPOSITORY_ROOT / "reference" / "RecoilEngine" / "rts"
+    subprocess.run(
+        [
+            *gcc,
+            "-fPIC",
+            "-shared",
+            "-O2",
+            "-std=c99",
+            "-lm",
+            "-DBUILDING_AI",
+            "-DBUILDING_SKIRMISH_AI",
+            f"-I{interface_dir}",
+            "-o",
+            str(BRIDGE_AI_SOURCE_DIRECTORY / "libSkirmishAI.so"),
+            str(source),
+        ],
+        check=True,
+    )
+    BRIDGE_AI_INSTALL_DIRECTORY.mkdir(parents=True, exist_ok=True)
+    for filename in ("libSkirmishAI.so", "AIInfo.lua", "AIOptions.lua"):
+        shutil.copy(BRIDGE_AI_SOURCE_DIRECTORY / filename, BRIDGE_AI_INSTALL_DIRECTORY / filename)
+    print(f"BridgeAI installed to {BRIDGE_AI_INSTALL_DIRECTORY}")
 
 
 def download_engine() -> None:
@@ -77,3 +113,4 @@ def download_all(map_names: list[str] | None = None) -> None:
     download_game()
     for map_name in map_names or [DEFAULT_MAP]:
         download_map(map_name)
+    build_bridge_ai()

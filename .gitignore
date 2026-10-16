@@ -27,3 +27,6 @@ result-*
 .idea/
 *.swp
 .DS_Store
+
+# BridgeAI library, compiled by installation.build_bridge_ai()
+src/beyond_all_reason_environment/bridge_ai/libSkirmishAI.so

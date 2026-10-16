@@ -19,11 +19,14 @@ class ArtificialIntelligencePlayer:
     ``short_name`` is the folder name in game_data/engine/<version>/AI/Skirmish.
     ``side`` is one faction, or a list of factions: in a batch, each match then draws one of them
     (reproducibly, from the match seed). A single match needs one faction.
+    ``options`` is written as an [AIOPTIONS] block in the start script and is readable by the AI
+    via SkirmishAI_OptionValues_getValueByKey (C) or similar.
     """
 
     short_name: str = "BARb"
     version: str = "stable"
     side: Side | list[Side] = "Armada"
+    options: dict[str, str] = field(default_factory=dict)
 
     def __post_init__(self) -> None:
         sides = [self.side] if isinstance(self.side, str) else self.side
@@ -90,9 +93,27 @@ def build_start_script(configuration: MatchConfiguration) -> str:
         "\t[PLAYER0] { Name=observer; Spectator=1; Team=0; }",
     ]
     for index, player in enumerate(configuration.players):
+        if player.options:
+            lines += [
+                f"\t[AI{index}]",
+                "\t{",
+                f"\t\tName={player.short_name}_{index};",
+                f"\t\tShortName={player.short_name};",
+                f"\t\tVersion={player.version};",
+                f"\t\tTeam={index};",
+                "\t\tHost=0;",
+                "\t\t[AIOPTIONS]",
+                "\t\t{",
+                *[f"\t\t\t{k}={v};" for k, v in player.options.items()],
+                "\t\t}",
+                "\t}",
+            ]
+        else:
+            lines.append(
+                f"\t[AI{index}] {{ Name={player.short_name}_{index}; ShortName={player.short_name}; "
+                f"Version={player.version}; Team={index}; Host=0; }}"
+            )
         lines += [
-            f"\t[AI{index}] {{ Name={player.short_name}_{index}; ShortName={player.short_name}; "
-            f"Version={player.version}; Team={index}; Host=0; }}",
             f"\t[TEAM{index}] {{ TeamLeader=0; AllyTeam={index}; Side={player.side}; }}",
             f"\t[ALLYTEAM{index}] {{ NumAllies=0; }}",
         ]
