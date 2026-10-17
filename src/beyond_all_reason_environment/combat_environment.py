@@ -531,25 +531,48 @@ def team_reward(
 def spawn_positions(configuration: CombatConfiguration, random: np.random.Generator) -> list[dict]:
     """One spawn entry per unit across all allyteams, agents (allyteam 0) first.
 
-    Allyteams are placed at equal intervals of group_separation around the map centre, along x;
-    units within each allyteam are spread along z.
+    Allyteams are spread evenly along x; units within each allyteam are spread along z.
+
+    With spawn_x_range set, allyteam t is centred at t / (N-1) along x, and the zone width
+    is spawn_x_range / (N-1) on each side (clipped to [0,1]).
+    spawn_x_range=0 gives deterministic positions at 0, 1/(N-1), …, 1.
+    spawn_x_range=1 gives each allyteam its full 1/N slice of the map.
+
+    With spawn_x_range=None, the classic group_separation/group_spread/spawn_jitter logic is used,
+    with allyteams placed at equal intervals of group_separation around the map centre.
     """
     n_allyteams = len(configuration.allyteams)
     spawns = []
-    for t, at in enumerate(configuration.allyteams):
-        centre_x = 0.5 + (t - (n_allyteams - 1) / 2) * configuration.group_separation
-        names = [name for name, count in at.units.items() for _ in range(count)]
-        for index, name in enumerate(names):
-            offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
-            jitter_x, jitter_z = random.uniform(-1, 1, 2) * configuration.spawn_jitter
-            spawns.append(
-                {
-                    "team": t,
-                    "unit": name,
-                    "x": float(np.clip(centre_x + jitter_x, 0, 1)),
-                    "z": float(np.clip(0.5 + offset * configuration.group_spread + jitter_z, 0, 1)),
-                }
-            )
+    x_range = configuration.spawn_x_range
+
+    if x_range is not None:
+        spread = x_range / (2 * max(n_allyteams - 1, 1))
+        for t, at in enumerate(configuration.allyteams):
+            base_x = t / max(n_allyteams - 1, 1)
+            lo = max(0.0, base_x - spread)
+            hi = min(1.0, base_x + spread)
+            names = [name for name, count in at.units.items() for _ in range(count)]
+            for index, name in enumerate(names):
+                x = float(lo if lo == hi else random.uniform(lo, hi))
+                offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
+                jitter_z = float(random.uniform(-1, 1) * configuration.spawn_jitter)
+                z = float(np.clip(0.5 + offset * configuration.group_spread + jitter_z, 0, 1))
+                spawns.append({"team": t, "unit": name, "x": x, "z": z})
+    else:
+        for t, at in enumerate(configuration.allyteams):
+            centre_x = 0.5 + (t - (n_allyteams - 1) / 2) * configuration.group_separation
+            names = [name for name, count in at.units.items() for _ in range(count)]
+            for index, name in enumerate(names):
+                offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
+                jitter_x, jitter_z = random.uniform(-1, 1, 2) * configuration.spawn_jitter
+                spawns.append(
+                    {
+                        "team": t,
+                        "unit": name,
+                        "x": float(np.clip(centre_x + jitter_x, 0, 1)),
+                        "z": float(np.clip(0.5 + offset * configuration.group_spread + jitter_z, 0, 1)),
+                    }
+                )
     return spawns
 
 

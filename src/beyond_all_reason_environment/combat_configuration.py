@@ -64,6 +64,11 @@ class CombatConfiguration(EnvironmentConfiguration):
     group_separation: float = 0.15
     group_spread: float = 0.06
     spawn_jitter: float = 0.01
+    # Spawn zone range in [0, 1]: controls how wide each allyteam's spawn zone is along x.
+    # At 0.0 each allyteam spawns at a single deterministic x (evenly spread across [0, 1]).
+    # At 1.0 each allyteam occupies its full band of the map width.
+    # When None, the classic group_separation / group_spread / spawn_jitter logic is used instead.
+    spawn_x_range: float | None = None
 
     # Commands allowed per unit name; "default" for the other units.
     commands: dict[str, list[str]] = field(default_factory=lambda: {"default": list(COMMANDS)})
