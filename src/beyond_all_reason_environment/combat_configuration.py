@@ -70,7 +70,7 @@ class CombatConfiguration(EnvironmentConfiguration):
     # "attack" targets the enemy nearest to the clicked point within this radius (game units), otherwise ignored.
     attack_snap_radius: float = 60.0
 
-    # Observation: separate entity lists, each taking the nearest units up to the given count.
+    # Actor observation: separate entity lists, each taking the nearest units up to the given count.
     maximum_ally_units: int = 4
     maximum_enemy_units: int = 8
     maximum_ally_buildings: int = 0
@@ -79,6 +79,10 @@ class CombatConfiguration(EnvironmentConfiguration):
     maximum_weapons_per_unit: int = 4
     # Number of BAR armor types (15 in the current game version).
     num_armor_types: int = 15
+
+    # Critic observation: per-enemy-allyteam budgets (distinct from the combined actor budgets above).
+    maximum_units_per_enemy_allyteam: int = 8
+    maximum_buildings_per_enemy_allyteam: int = 0
 
     rewards: RewardWeights = field(default_factory=RewardWeights)
 

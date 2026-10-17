@@ -58,6 +58,17 @@ Observation of an agent (dictionary of float32 arrays):
 
     command_mask   1 for commands the unit type may give (CombatConfiguration.commands)
 
+    Centralized critic keys (per-allyteam, for CTDE training only):
+        allyteam0_units_chassis    (1 + maximum_ally_units, n_chassis)  — self prepended
+        allyteam0_units_state      (1 + maximum_ally_units, n_state)
+        allyteam0_unit_mask        (1 + maximum_ally_units,)
+        allyteam0_units_weapons    (1 + maximum_ally_units, maximum_weapons_per_unit, n_weapon)
+        allyteam0_units_weapon_mask (1 + maximum_ally_units, maximum_weapons_per_unit)
+        allyteam0_buildings_chassis (maximum_ally_buildings, n_chassis)
+        … (same pattern)
+        allyteamN_units_chassis    (maximum_units_per_enemy_allyteam, n_chassis)  — for t = 1..N-1
+        … (same pattern)
+
 Chassis features (static within an episode for a given unit type on a given map):
     type one-hot, maximum_health_thousands, armor_type one-hot (num_armor_types),
     speed_x/z, weapon_range_x/z, sight_x/z, can_move.
@@ -276,6 +287,9 @@ def encode_observation(
     n_weapon = len(weapon_feature_names(num_at))
     n_allyteams = len(configuration.allyteams)
     n_enemy_allyteams = max(n_allyteams - 1, 1)
+    max_units_per_enemy_at = configuration.maximum_units_per_enemy_allyteam
+    max_bld_per_enemy_at = configuration.maximum_buildings_per_enemy_allyteam
+    max_at0_units = 1 + max_ally  # self prepended before ally units
 
     observation: dict[str, np.ndarray] = {
         "self_chassis": np.zeros(n_chassis, dtype=np.float32),
@@ -306,6 +320,33 @@ def encode_observation(
         "command_mask": np.array(
             [float(command in configuration.allowed_commands(unit_name)) for command in COMMANDS], dtype=np.float32
         ),
+        # Critic keys — allyteam 0: self (row 0) prepended before ally units (rows 1..)
+        "allyteam0_units_chassis": np.zeros((max_at0_units, n_chassis), dtype=np.float32),
+        "allyteam0_units_state": np.zeros((max_at0_units, n_state), dtype=np.float32),
+        "allyteam0_unit_mask": np.zeros(max_at0_units, dtype=np.float32),
+        "allyteam0_units_weapons": np.zeros((max_at0_units, max_weapons, n_weapon), dtype=np.float32),
+        "allyteam0_units_weapon_mask": np.zeros((max_at0_units, max_weapons), dtype=np.float32),
+        "allyteam0_buildings_chassis": np.zeros((max_ally_bld, n_chassis), dtype=np.float32),
+        "allyteam0_buildings_state": np.zeros((max_ally_bld, n_state), dtype=np.float32),
+        "allyteam0_building_mask": np.zeros(max_ally_bld, dtype=np.float32),
+        "allyteam0_buildings_weapons": np.zeros((max_ally_bld, max_weapons, n_weapon), dtype=np.float32),
+        "allyteam0_buildings_weapon_mask": np.zeros((max_ally_bld, max_weapons), dtype=np.float32),
+        **{
+            key: np.zeros(shape, dtype=np.float32)
+            for t in range(1, n_allyteams)
+            for key, shape in [
+                (f"allyteam{t}_units_chassis", (max_units_per_enemy_at, n_chassis)),
+                (f"allyteam{t}_units_state", (max_units_per_enemy_at, n_state)),
+                (f"allyteam{t}_unit_mask", (max_units_per_enemy_at,)),
+                (f"allyteam{t}_units_weapons", (max_units_per_enemy_at, max_weapons, n_weapon)),
+                (f"allyteam{t}_units_weapon_mask", (max_units_per_enemy_at, max_weapons)),
+                (f"allyteam{t}_buildings_chassis", (max_bld_per_enemy_at, n_chassis)),
+                (f"allyteam{t}_buildings_state", (max_bld_per_enemy_at, n_state)),
+                (f"allyteam{t}_building_mask", (max_bld_per_enemy_at,)),
+                (f"allyteam{t}_buildings_weapons", (max_bld_per_enemy_at, max_weapons, n_weapon)),
+                (f"allyteam{t}_buildings_weapon_mask", (max_bld_per_enemy_at, max_weapons)),
+            ]
+        },
     }
 
     units = {u["id"]: u for u in raw["units"]}
@@ -333,6 +374,12 @@ def encode_observation(
     def is_mobile(u: dict) -> bool:
         return bool(unit_types_data.get(u["unit"], {}).get("can_move", 1))
 
+    # Group all units by team for critic keys; each team index equals its allyteam index in our setup.
+    all_units_by_team: dict[int, list[dict]] = {}
+    for u in raw["units"]:
+        all_units_by_team.setdefault(u["team"], []).append(u)
+
+    # ── Actor categories ──────────────────────────────────────────────────────────────────────────
     all_allies = [u for u in raw["units"] if u["id"] != unit_id and u["team"] == observer["team"]]
     all_enemies = [u for u in raw["units"] if u["team"] != observer["team"]]
     ally_units = sorted([u for u in all_allies if is_mobile(u)], key=dist_sq)
@@ -393,6 +440,57 @@ def encode_observation(
         "enemy_buildings_weapon_mask",
         max_enemy_bld,
     )
+
+    # ── Critic keys: allyteam 0 (self prepended at row 0, ally units at rows 1..) ─────────────────
+    observation["allyteam0_units_chassis"][0] = _chassis_features(observer, observer_type, configuration)
+    observation["allyteam0_units_state"][0] = _state_features(observer, observer, configuration, map_size, 0.0)
+    observation["allyteam0_unit_mask"][0] = 1.0
+    observation["allyteam0_units_weapons"][0], observation["allyteam0_units_weapon_mask"][0] = _unit_weapons(
+        observer_type, configuration
+    )
+    for row, entity in enumerate(ally_units[:max_ally]):
+        et = unit_types_data.get(entity["unit"], {})
+        observation["allyteam0_units_chassis"][1 + row] = _chassis_features(entity, et, configuration)
+        observation["allyteam0_units_state"][1 + row] = _state_features(entity, observer, configuration, map_size, 0.0)
+        observation["allyteam0_unit_mask"][1 + row] = 1.0
+        observation["allyteam0_units_weapons"][1 + row], observation["allyteam0_units_weapon_mask"][1 + row] = (
+            _unit_weapons(et, configuration)
+        )
+    for row, entity in enumerate(ally_buildings[:max_ally_bld]):
+        et = unit_types_data.get(entity["unit"], {})
+        observation["allyteam0_buildings_chassis"][row] = _chassis_features(entity, et, configuration)
+        observation["allyteam0_buildings_state"][row] = _state_features(entity, observer, configuration, map_size, 0.0)
+        observation["allyteam0_building_mask"][row] = 1.0
+        observation["allyteam0_buildings_weapons"][row], observation["allyteam0_buildings_weapon_mask"][row] = (
+            _unit_weapons(et, configuration)
+        )
+
+    # ── Critic keys: allyteams 1..N-1, one group of arrays per enemy allyteam ────────────────────
+    for t in range(1, n_allyteams):
+        at_norm = t / n_enemy_allyteams
+        enemy_t_all = all_units_by_team.get(t, [])
+        enemy_t_units = sorted([u for u in enemy_t_all if is_mobile(u)], key=dist_sq)
+        enemy_t_blds = sorted([u for u in enemy_t_all if not is_mobile(u)], key=dist_sq)
+        for row, entity in enumerate(enemy_t_units[:max_units_per_enemy_at]):
+            et = unit_types_data.get(entity["unit"], {})
+            observation[f"allyteam{t}_units_chassis"][row] = _chassis_features(entity, et, configuration)
+            observation[f"allyteam{t}_units_state"][row] = _state_features(
+                entity, observer, configuration, map_size, at_norm
+            )
+            observation[f"allyteam{t}_unit_mask"][row] = 1.0
+            observation[f"allyteam{t}_units_weapons"][row], observation[f"allyteam{t}_units_weapon_mask"][row] = (
+                _unit_weapons(et, configuration)
+            )
+        for row, entity in enumerate(enemy_t_blds[:max_bld_per_enemy_at]):
+            et = unit_types_data.get(entity["unit"], {})
+            observation[f"allyteam{t}_buildings_chassis"][row] = _chassis_features(entity, et, configuration)
+            observation[f"allyteam{t}_buildings_state"][row] = _state_features(
+                entity, observer, configuration, map_size, at_norm
+            )
+            observation[f"allyteam{t}_building_mask"][row] = 1.0
+            weapons, weapon_mask = _unit_weapons(et, configuration)
+            observation[f"allyteam{t}_buildings_weapons"][row] = weapons
+            observation[f"allyteam{t}_buildings_weapon_mask"][row] = weapon_mask
 
     return observation
 
@@ -477,6 +575,56 @@ class CombatEnvironment(Environment):
         max_weapons = self.configuration.maximum_weapons_per_unit
         n_weapon = len(weapon_feature_names(self.configuration.num_armor_types))
         terrain_w, terrain_h = self.configuration.terrain_resolution
+        n_allyteams = len(self.configuration.allyteams)
+        max_at0_units = 1 + max_ally
+        max_units_per_enemy_at = self.configuration.maximum_units_per_enemy_allyteam
+        max_bld_per_enemy_at = self.configuration.maximum_buildings_per_enemy_allyteam
+
+        critic_spaces: dict = {
+            "allyteam0_units_chassis": spaces.Box(-np.inf, np.inf, (max_at0_units, n_chassis), np.float32),
+            "allyteam0_units_state": spaces.Box(-np.inf, np.inf, (max_at0_units, n_state), np.float32),
+            "allyteam0_unit_mask": spaces.Box(0, 1, (max_at0_units,), np.float32),
+            "allyteam0_units_weapons": spaces.Box(-np.inf, np.inf, (max_at0_units, max_weapons, n_weapon), np.float32),
+            "allyteam0_units_weapon_mask": spaces.Box(0, 1, (max_at0_units, max_weapons), np.float32),
+            "allyteam0_buildings_chassis": spaces.Box(-np.inf, np.inf, (max_ally_bld, n_chassis), np.float32),
+            "allyteam0_buildings_state": spaces.Box(-np.inf, np.inf, (max_ally_bld, n_state), np.float32),
+            "allyteam0_building_mask": spaces.Box(0, 1, (max_ally_bld,), np.float32),
+            "allyteam0_buildings_weapons": spaces.Box(
+                -np.inf, np.inf, (max_ally_bld, max_weapons, n_weapon), np.float32
+            ),
+            "allyteam0_buildings_weapon_mask": spaces.Box(0, 1, (max_ally_bld, max_weapons), np.float32),
+        }
+        for t in range(1, n_allyteams):
+            critic_spaces.update(
+                {
+                    f"allyteam{t}_units_chassis": spaces.Box(
+                        -np.inf, np.inf, (max_units_per_enemy_at, n_chassis), np.float32
+                    ),
+                    f"allyteam{t}_units_state": spaces.Box(
+                        -np.inf, np.inf, (max_units_per_enemy_at, n_state), np.float32
+                    ),
+                    f"allyteam{t}_unit_mask": spaces.Box(0, 1, (max_units_per_enemy_at,), np.float32),
+                    f"allyteam{t}_units_weapons": spaces.Box(
+                        -np.inf, np.inf, (max_units_per_enemy_at, max_weapons, n_weapon), np.float32
+                    ),
+                    f"allyteam{t}_units_weapon_mask": spaces.Box(
+                        0, 1, (max_units_per_enemy_at, max_weapons), np.float32
+                    ),
+                    f"allyteam{t}_buildings_chassis": spaces.Box(
+                        -np.inf, np.inf, (max_bld_per_enemy_at, n_chassis), np.float32
+                    ),
+                    f"allyteam{t}_buildings_state": spaces.Box(
+                        -np.inf, np.inf, (max_bld_per_enemy_at, n_state), np.float32
+                    ),
+                    f"allyteam{t}_building_mask": spaces.Box(0, 1, (max_bld_per_enemy_at,), np.float32),
+                    f"allyteam{t}_buildings_weapons": spaces.Box(
+                        -np.inf, np.inf, (max_bld_per_enemy_at, max_weapons, n_weapon), np.float32
+                    ),
+                    f"allyteam{t}_buildings_weapon_mask": spaces.Box(
+                        0, 1, (max_bld_per_enemy_at, max_weapons), np.float32
+                    ),
+                }
+            )
 
         self._observation_space = spaces.Dict(
             {
@@ -511,6 +659,7 @@ class CombatEnvironment(Environment):
                 "context": spaces.Box(-np.inf, np.inf, (len(CONTEXT_FEATURES),), np.float32),
                 "command_mask": spaces.Box(0, 1, (len(COMMANDS),), np.float32),
                 "terrain": spaces.Box(-np.inf, np.inf, (terrain_h, terrain_w, 4), np.float32),
+                **critic_spaces,
             }
         )
         self._action_space = spaces.Dict(
