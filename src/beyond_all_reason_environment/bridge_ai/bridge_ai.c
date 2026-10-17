@@ -85,6 +85,10 @@ static int episode             = -1;
 static int episode_start_frame = 0;
 static int prev_decision_frame = -1;
 static int next_decision_frame = -1;
+/* Deferred reset observation: newly created units are not registered in
+ * getEnemyUnits until the frame after they are spawned, so we send the
+ * first observation of each episode on the frame following the reset. */
+static int pending_reset_obs   = 0;
 
 /* Unit IDs returned by the gadget after reset (comma-separated) */
 static char spawned_units[4096] = "";
@@ -638,6 +642,17 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
         const struct SUpdateEvent *e = (const struct SUpdateEvent *)data;
         int frame = e->frame;
 
+        /* Send deferred post-reset observation: unit lists are stable one frame
+         * after the reset, so newly spawned enemy units appear in getEnemyUnits. */
+        if (pending_reset_obs) {
+            pending_reset_obs = 0;
+            send_observation(frame, 0);
+            if (!tcp_recv()) { log_msg("[BridgeAI] connection lost"); return -1; }
+            char type[32]; jstr(line, "type", type, sizeof(type));
+            if (strcmp(type, "actions") == 0) apply_actions();
+            break;
+        }
+
         if (bridge_state == S_INIT) {
             if (frame < FIRST_FRAME) break;
 
@@ -658,12 +673,8 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
             episode_start_frame = frame;
             prev_decision_frame = frame;
             next_decision_frame = frame + decision_interval;
-            send_observation(frame, 0);
+            pending_reset_obs = 1;
             bridge_state = S_RUNNING;
-
-            if (!tcp_recv()) { log_msg("[BridgeAI] connection lost"); return -1; }
-            jstr(line, "type", type, sizeof(type));
-            if (strcmp(type, "actions") == 0) apply_actions();
         }
         else if (bridge_state == S_RUNNING) {
             if (frame < next_decision_frame) break;
@@ -684,10 +695,7 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
                 episode_start_frame = frame;
                 prev_decision_frame = frame;
                 next_decision_frame = frame + decision_interval;
-                send_observation(frame, 0);
-                if (!tcp_recv()) { log_msg("[BridgeAI] connection lost"); return -1; }
-                jstr(line, "type", type, sizeof(type));
-                if (strcmp(type, "actions") == 0) apply_actions();
+                pending_reset_obs = 1;
             }
         }
         break;
