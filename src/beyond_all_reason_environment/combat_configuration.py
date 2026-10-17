@@ -57,8 +57,8 @@ class CombatConfiguration(EnvironmentConfiguration):
     maximum_enemy_buildings: int = 0
     # Weapon slots per entity (up to this many weapon tokens, padded).
     maximum_weapons_per_unit: int = 4
-    # Number of BAR armor types (14 in the current game version).
-    num_armor_types: int = 14
+    # Number of BAR armor types (15 in the current game version).
+    num_armor_types: int = 15
 
     rewards: RewardWeights = field(default_factory=RewardWeights)
 

@@ -558,6 +558,13 @@ class CombatEnvironment(Environment):
         self._reader = self._connection.makefile("r", encoding="utf-8")
         ready = self._receive()
         self._map_size = (float(ready["map"]["size_x"]), float(ready["map"]["size_z"]))
+        engine_armor_types = int(ready.get("num_armor_types", self.configuration.num_armor_types))
+        if engine_armor_types != self.configuration.num_armor_types:
+            raise RuntimeError(
+                f"num_armor_types mismatch: engine reports {engine_armor_types}, "
+                f"configuration has {self.configuration.num_armor_types}. "
+                f"Update CombatConfiguration.num_armor_types to match."
+            )
         terrain_w, terrain_h = self.configuration.terrain_resolution
         terrain_msg = self._receive()
         self._terrain = np.array(terrain_msg["data"], dtype=np.float32).reshape(terrain_h, terrain_w, 3)

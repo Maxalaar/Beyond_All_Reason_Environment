@@ -46,7 +46,7 @@ class Environment(ABC):
 
     def _send(self, message: dict) -> None:
         assert self._connection is not None
-        self._connection.sendall((json.dumps(message) + "\n").encode())
+        self._connection.sendall((json.dumps(message, separators=(",", ":")) + "\n").encode())
 
     def _receive(self) -> dict:
         assert self._reader is not None

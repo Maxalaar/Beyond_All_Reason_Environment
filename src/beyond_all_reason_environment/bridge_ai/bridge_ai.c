@@ -76,7 +76,7 @@ static float map_x = 1.0f;  /* in game units (elmos) */
 static float map_z = 1.0f;
 
 /* Number of BAR armor types, queried from the engine in EVENT_INIT (STATIC API). */
-static int num_armor_types = 14;
+static int num_armor_types = 15;
 
 /* Episode */
 typedef enum { S_INIT, S_RUNNING } BridgeState;

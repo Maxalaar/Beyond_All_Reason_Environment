@@ -19,7 +19,7 @@ class ArtificialIntelligencePlayer:
     ``short_name`` is the folder name in game_data/engine/<version>/AI/Skirmish.
     ``side`` is one faction, or a list of factions: in a batch, each match then draws one of them
     (reproducibly, from the match seed). A single match needs one faction.
-    ``options`` is written as an [AIOPTIONS] block in the start script and is readable by the AI
+    ``options`` is written as an [OPTIONS] block in the start script and is readable by the AI
     via SkirmishAI_OptionValues_getValueByKey (C) or similar.
     """
 
@@ -102,7 +102,7 @@ def build_start_script(configuration: MatchConfiguration) -> str:
                 f"\t\tVersion={player.version};",
                 f"\t\tTeam={index};",
                 "\t\tHost=0;",
-                "\t\t[AIOPTIONS]",
+                "\t\t[OPTIONS]",
                 "\t\t{",
                 *[f"\t\t\t{k}={v};" for k, v in player.options.items()],
                 "\t\t}",
