@@ -74,6 +74,11 @@ static int terrain_h         = 64;
 /* Map */
 static float map_x = 1.0f;  /* in game units (elmos) */
 static float map_z = 1.0f;
+static int map_width_sq  = 128;  /* map width in squares (8 elmos each) */
+static int map_height_sq = 128;
+
+/* LoS map mip level: LoS grid is (map_width_sq >> los_mip_level) x (map_height_sq >> los_mip_level). */
+static int los_mip_level = 1;
 
 /* Number of BAR armor types, queried from the engine in EVENT_INIT (STATIC API). */
 static int num_armor_types = 15;
@@ -463,7 +468,37 @@ static void send_observation(int frame, int frames_since_prev) {
             }
         }
     }
-    obs_str("}}");
+    /* Visibility channel: one value per terrain cell, 1 = in LoS, 0 = not. */
+    obs_str("},\"visibility\":[");
+    int los_w = map_width_sq  >> los_mip_level;
+    int los_h = map_height_sq >> los_mip_level;
+    if (los_w < 1) los_w = 1;
+    if (los_h < 1) los_h = 1;
+    int *los_map = (int *)malloc(los_w * los_h * sizeof(int));
+    if (los_map) {
+        memset(los_map, 0, los_w * los_h * sizeof(int));
+        cb->Map_getLosMap(ai_id, los_map, los_w * los_h);
+        for (int j = 0; j < terrain_h; j++) {
+            for (int i = 0; i < terrain_w; i++) {
+                int sq_x = (int)((i + 0.5f) * (float)map_width_sq  / (float)terrain_w);
+                int sq_z = (int)((j + 0.5f) * (float)map_height_sq / (float)terrain_h);
+                int lx = sq_x >> los_mip_level;
+                int lz = sq_z >> los_mip_level;
+                if (lx >= los_w) lx = los_w - 1;
+                if (lz >= los_h) lz = los_h - 1;
+                int last = (j == terrain_h - 1 && i == terrain_w - 1);
+                obs_str(los_map[lz * los_w + lx] > 0 ? "1" : "0");
+                if (!last) obs_str(",");
+            }
+        }
+        free(los_map);
+    } else {
+        int n = terrain_w * terrain_h;
+        for (int k = 0; k < n; k++) {
+            obs_str(k < n - 1 ? "1," : "1");
+        }
+    }
+    obs_str("]}");
     tcp_send();
 }
 
@@ -623,8 +658,12 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
         if (th_str)  terrain_h = atoi(th_str);
 
         /* Map size in game units */
-        map_x = (float)(cb->Map_getWidth(ai_id)  * SQUARE_SIZE);
-        map_z = (float)(cb->Map_getHeight(ai_id) * SQUARE_SIZE);
+        map_width_sq  = cb->Map_getWidth(ai_id);
+        map_height_sq = cb->Map_getHeight(ai_id);
+        map_x = (float)(map_width_sq  * SQUARE_SIZE);
+        map_z = (float)(map_height_sq * SQUARE_SIZE);
+        int mip = cb->Mod_getLosMipLevel(ai_id);
+        if (mip > 0) los_mip_level = mip;
 
         /* Armor type count is a static global property of the game. */
         int n_armor = cb->WeaponDef_getNumDamageTypes(ai_id);

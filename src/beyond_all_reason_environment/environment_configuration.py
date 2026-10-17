@@ -12,13 +12,11 @@ class EnvironmentConfiguration:
     map_name: str = DEFAULT_MAP
     maximum_episode_minutes: float = 1.0
     decision_interval_frames: int = 32
-    # Observation: the nearest entities each agent sees.
-    maximum_entities_seen: int = 16
     # Both teams see the whole map; required so the engine accepts attack orders on distant units.
     full_vision: bool = True
-    # Terrain observation: the heightmap resampled to this fixed (width, height) grid.
-    # Channels: normalised height, slope in [0,1), water mask. The real map dimensions are
-    # already in the self token (map_size_x_thousands, map_size_z_thousands, map_aspect_ratio).
+    # Terrain observation: the map resampled to this fixed (width, height) grid.
+    # Channels: normalised height, slope in [0,1), water mask, LoS visibility (1=visible, 0=fog).
+    # The first three are constant within an episode; visibility is updated every decision step.
     terrain_resolution: tuple[int, int] = (64, 64)
     # Engine: as fast as possible without graphics; with graphical=True a window shows the episodes at speed.
     graphical: bool = False

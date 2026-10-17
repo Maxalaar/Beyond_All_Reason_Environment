@@ -51,9 +51,10 @@ Observation of an agent (dictionary of float32 arrays):
     Level 3 inputs:
         context     global context features sent directly to level 3 (map size, episode time,
                     decision interval ratio); does not depend on which agent is observing
-        terrain     (terrain_height, terrain_width, 3) — the full map resampled to a fixed grid;
-                    channels: normalised height (raw_elmos/1000), slope squashed to [0,1), water mask;
-                    shared across all agents, constant within an episode
+        terrain     (terrain_height, terrain_width, 4) — the full map resampled to a fixed grid;
+                    channels: normalised height (raw_elmos/1000), slope squashed to [0,1), water mask,
+                    and LoS visibility (1.0 = visible, 0.0 = fog); the first three channels are
+                    constant within an episode, the visibility channel is updated every step
 
     command_mask   1 for commands the unit type may give (CombatConfiguration.commands)
 
@@ -509,7 +510,7 @@ class CombatEnvironment(Environment):
                 "enemy_buildings_weapon_mask": spaces.Box(0, 1, (max_enemy_bld, max_weapons), np.float32),
                 "context": spaces.Box(-np.inf, np.inf, (len(CONTEXT_FEATURES),), np.float32),
                 "command_mask": spaces.Box(0, 1, (len(COMMANDS),), np.float32),
-                "terrain": spaces.Box(-np.inf, np.inf, (terrain_h, terrain_w, 3), np.float32),
+                "terrain": spaces.Box(-np.inf, np.inf, (terrain_h, terrain_w, 4), np.float32),
             }
         )
         self._action_space = spaces.Dict(
@@ -517,7 +518,7 @@ class CombatEnvironment(Environment):
         )
 
         self._map_size = (1.0, 1.0)
-        self._terrain = np.zeros((terrain_h, terrain_w, 3), dtype=np.float32)
+        self._terrain = np.zeros((terrain_h, terrain_w, 4), dtype=np.float32)
         self._random = np.random.default_rng()
         self._episode = -1
         self._agent_unit_ids: dict[str, int] = {}
@@ -586,11 +587,16 @@ class CombatEnvironment(Environment):
             )
         terrain_w, terrain_h = self.configuration.terrain_resolution
         terrain_msg = self._receive()
-        self._terrain = np.array(terrain_msg["data"], dtype=np.float32).reshape(terrain_h, terrain_w, 3)
+        self._terrain[:, :, :3] = np.array(terrain_msg["data"], dtype=np.float32).reshape(terrain_h, terrain_w, 3)
+        self._terrain[:, :, 3] = 1.0  # default: full visibility until first step
 
     # --- Episodes -----------------------------------------------------------------------------------------------
 
     def _observations(self, raw: dict) -> dict[str, dict[str, np.ndarray]]:
+        visibility = raw.get("visibility")
+        if visibility is not None:
+            terrain_h, terrain_w = self._terrain.shape[:2]
+            self._terrain[:, :, 3] = np.array(visibility, dtype=np.float32).reshape(terrain_h, terrain_w)
         observations = {
             agent: encode_observation(
                 raw, self._agent_unit_ids[agent], self.agent_unit_names[index], self.configuration, self._map_size
