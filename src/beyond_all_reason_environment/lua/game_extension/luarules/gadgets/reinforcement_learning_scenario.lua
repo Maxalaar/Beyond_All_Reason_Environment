@@ -5,9 +5,10 @@
 -- this handler synchronously, in the same frame — no server-lead delay.
 --
 -- Message format from the BridgeAI:
---   "rl_reset|<episode>|<team>,<unit>,<x>,<z>;...|<agent fire>,<agent move>,<opp fire>,<opp move>"
---      removes every unit of the scenario teams and the wrecks of the previous episode,
+--   "rl_reset|<episode>|<team>,<unit>,<x>,<z>;...|<t0_fire>,<t0_move>,<t1_fire>,<t1_move>,..."
+--      removes every unit of all active teams and the wrecks of the previous episode,
 --      spawns the new units (x, z as fractions of the map), sets fire and move states.
+--      The states array has 2*N values for N allyteams: fire and move per team index.
 --      Returns: "<unit_id>,<unit_id>,..." (spawned order, agents first).
 
 if not gadgetHandler:IsSyncedCode() then
@@ -23,8 +24,7 @@ function gadget:GetInfo()
 	}
 end
 
-local SCENARIO_TEAMS = { 0, 1 }
-local modOptions     = Spring.GetModOptions()
+local modOptions = Spring.GetModOptions()
 
 local currentEpisode  = -1
 local episodeFeatures = {}  -- wrecks created during the current episode
@@ -51,9 +51,10 @@ end
 local function reset(message)
 	local fields  = split(message, "|")
 	local episode = tonumber(fields[1])
+	-- states: 2*N values — fire and move state for team 0, 1, …, N-1
 	local states  = split(fields[3] or "2,1,0,0", ",")
 
-	for _, teamID in ipairs(SCENARIO_TEAMS) do
+	for _, teamID in ipairs(Spring.GetTeamList()) do
 		for _, unitID in ipairs(Spring.GetTeamUnits(teamID)) do
 			Spring.DestroyUnit(unitID, false, true)  -- reclaimed: no wreck
 		end
@@ -71,14 +72,14 @@ local function reset(message)
 		local teamID  = tonumber(values[1])
 		local name    = values[2]
 		local x, y, z = mapPoint(tonumber(values[3]), tonumber(values[4]))
+		-- Team 0 faces east (toward increasing x), all others face west.
 		local facing  = (teamID == 0) and "east" or "west"
 		local uid     = Spring.CreateUnit(name, x, y, z, facing, teamID)
 		if uid then
-			if teamID == 0 then
-				setStates(uid, tonumber(states[1]), tonumber(states[2]))
-			else
-				setStates(uid, tonumber(states[3]), tonumber(states[4]))
-			end
+			-- states array is 1-indexed in Lua; team t uses indices 2*t+1 and 2*t+2.
+			local fireState = tonumber(states[teamID * 2 + 1]) or 0
+			local moveState = tonumber(states[teamID * 2 + 2]) or 0
+			setStates(uid, fireState, moveState)
 			unitIDs[#unitIDs + 1] = tostring(uid)
 		else
 			Spring.Echo("[RL Scenario] could not create " .. tostring(name))
@@ -105,8 +106,7 @@ end
 
 function gadget:Initialize()
 	if modOptions.reinforcement_learning_full_vision == "1" then
-		for _, teamID in ipairs(SCENARIO_TEAMS) do
-			local allyTeamID = select(6, Spring.GetTeamInfo(teamID, false))
+		for _, allyTeamID in ipairs(Spring.GetAllyTeamList()) do
 			Spring.SetGlobalLos(allyTeamID, true)
 		end
 	end

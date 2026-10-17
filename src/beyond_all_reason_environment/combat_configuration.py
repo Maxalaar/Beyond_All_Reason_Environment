@@ -31,16 +31,36 @@ class RewardWeights:
 
 
 @dataclass
+class AllyteamConfiguration:
+    """Units and (for non-agent allyteams) behaviour of one allyteam.
+
+    Allyteam 0 is always controlled by the RL agents; its behaviour field is ignored.
+    Allyteams 1+ are NullAI-driven with the specified fire/move state preset:
+        passive:      does not move, does not shoot.
+        hold_and_fire: does not move, shoots what comes into range.
+    """
+
+    units: dict[str, int] = field(default_factory=lambda: {"armpw": 5})
+    behaviour: Literal["passive", "hold_and_fire"] = "hold_and_fire"
+
+
+@dataclass
 class CombatConfiguration(EnvironmentConfiguration):
-    """Configuration for a combat-only environment: two groups of units fight until one side is eliminated."""
+    """Configuration for a combat-only environment: N allyteams fight until one side is eliminated.
 
-    # Unit name -> number of units. Agents are team 0, the opponent team 1.
-    agent_units: dict[str, int] = field(default_factory=lambda: {"armpw": 5})
-    opponent_units: dict[str, int] = field(default_factory=lambda: {"armpw": 5})
-    # passive: does not move, does not shoot. hold_and_fire: does not move, shoots what comes in range.
-    opponent_behaviour: Literal["passive", "hold_and_fire"] = "passive"
+    allyteams[0]  — RL agents (one agent per unit, shared policy).
+    allyteams[1+] — NullAI opponents, with per-allyteam fire/move state presets.
+    """
 
-    # Spawn: both groups centred on the map centre, apart along x, spread along z (fractions of the map).
+    # Each entry defines one allyteam; allyteams[0] = agents, rest = opponents.
+    allyteams: list[AllyteamConfiguration] = field(
+        default_factory=lambda: [
+            AllyteamConfiguration(units={"armpw": 5}, behaviour="hold_and_fire"),
+            AllyteamConfiguration(units={"armpw": 5}, behaviour="hold_and_fire"),
+        ]
+    )
+
+    # Spawn: allyteams spread along x, units spread along z (fractions of the map).
     group_separation: float = 0.15
     group_spread: float = 0.06
     spawn_jitter: float = 0.01
@@ -62,8 +82,7 @@ class CombatConfiguration(EnvironmentConfiguration):
 
     rewards: RewardWeights = field(default_factory=RewardWeights)
 
-    # States of the agents' units, as a player would set them. Manoeuvre (the game's default) lets a unit move to
-    # reach the target of an "attack" order; on hold position the engine drops an attack out of range.
+    # Fire and move states applied to agent units (allyteam 0) at episode start.
     agent_fire_state: int = FIRE_AT_WILL
     agent_move_state: int = MANOEUVRE
 
@@ -73,17 +92,22 @@ class CombatConfiguration(EnvironmentConfiguration):
             unknown = set(allowed) - set(COMMANDS)
             if unknown:
                 raise ValueError(f"unknown commands for {unit}: {sorted(unknown)}, known: {COMMANDS}")
-        if self.opponent_behaviour not in OPPONENT_STATES:
-            raise ValueError(f"opponent_behaviour must be one of {sorted(OPPONENT_STATES)}")
+        if len(self.allyteams) < 2:
+            raise ValueError("CombatConfiguration requires at least 2 allyteams.")
+        for t, at in enumerate(self.allyteams[1:], start=1):
+            if at.behaviour not in OPPONENT_STATES:
+                raise ValueError(
+                    f"allyteams[{t}].behaviour must be one of {sorted(OPPONENT_STATES)}, got {at.behaviour!r}"
+                )
 
     @property
     def unit_types(self) -> list[str]:
-        """Every unit name of the scenario, sorted: the order of the unit type one-hot in observations."""
-        return sorted(set(self.agent_units) | set(self.opponent_units))
+        """Every unit name across all allyteams, sorted: the order of the unit type one-hot in observations."""
+        return sorted(set(name for at in self.allyteams for name in at.units))
 
     @property
     def number_of_agents(self) -> int:
-        return sum(self.agent_units.values())
+        return sum(self.allyteams[0].units.values())
 
     def allowed_commands(self, unit_name: str) -> list[str]:
         return self.commands.get(unit_name, self.commands.get("default", list(COMMANDS)))

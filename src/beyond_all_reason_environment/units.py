@@ -5,8 +5,10 @@ Use for IDE autocomplete in scenario configurations::
     from beyond_all_reason_environment.units import units
 
     configuration = CombatConfiguration(
-        agent_units={units.armada.bot.t1.pawn: 5},
-        opponent_units={units.cortex.bot.t1.grunt: 5},
+        allyteams=[
+            AllyteamConfiguration(units={units.armada.bot.t1.pawn: 5}),
+            AllyteamConfiguration(units={units.cortex.bot.t1.grunt: 5}, behaviour="hold_and_fire"),
+        ],
     )
 """
 

@@ -15,8 +15,8 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
-from beyond_all_reason_environment.combat_environment import CombatEnvironment, entity_feature_names
+from beyond_all_reason_environment.combat_configuration import COMMANDS, AllyteamConfiguration, CombatConfiguration
+from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
 
 ATTACK = COMMANDS.index("attack")
 
@@ -26,13 +26,14 @@ def random_action(observation: dict, random: np.random.Generator) -> dict:
     return {"command": int(random.choice(allowed)), "target": random.uniform(0, 1, 2).astype(np.float32)}
 
 
-def attack_nearest_action(observation: dict, feature_names: list[str]) -> dict:
-    """Click "attack" on the nearest visible enemy (entities are sorted by distance)."""
-    is_enemy, x, z = (feature_names.index(name) for name in ("is_enemy", "x", "z"))
-    for row in range(len(observation["entity_mask"])):
-        if observation["entity_mask"][row] and observation["entities"][row, is_enemy]:
-            target = observation["entities"][row, [x, z]]
-            return {"command": ATTACK, "target": target.astype(np.float32)}
+def attack_nearest_action(observation: dict, x_idx: int, z_idx: int) -> dict:
+    """Click "attack" on the nearest visible enemy (enemy_units sorted by distance)."""
+    enemy_mask = observation["enemy_unit_mask"]
+    enemy_state = observation["enemy_units_state"]
+    for row in range(len(enemy_mask)):
+        if enemy_mask[row] > 0:
+            target = enemy_state[row, [x_idx, z_idx]].astype(np.float32)
+            return {"command": ATTACK, "target": target}
     return {"command": COMMANDS.index("continue"), "target": np.zeros(2, np.float32)}
 
 
@@ -48,12 +49,16 @@ def main() -> None:
     arguments = parser.parse_args()
 
     configuration = CombatConfiguration(
-        opponent_behaviour=arguments.opponent,
+        allyteams=[
+            AllyteamConfiguration(units={"armpw": 5}),
+            AllyteamConfiguration(units={"armpw": 5}, behaviour=arguments.opponent),
+        ],
         graphical=arguments.graphical,
         speed=arguments.speed or (1.0 if arguments.graphical else 1000.0),
         keep_run_directory=arguments.keep_run_directory,
     )
-    feature_names = entity_feature_names(configuration)
+    state_names = state_feature_names()
+    x_idx, z_idx = state_names.index("x"), state_names.index("z")
     random = np.random.default_rng(arguments.seed)
     start = time.monotonic()
     with CombatEnvironment(configuration) as environment:
@@ -67,7 +72,7 @@ def main() -> None:
                 actions = {
                     agent: random_action(observations[agent], random)
                     if arguments.policy == "random"
-                    else attack_nearest_action(observations[agent], feature_names)
+                    else attack_nearest_action(observations[agent], x_idx, z_idx)
                     for agent in environment.agents
                 }
                 observations, rewards, terminations, truncations, informations = environment.step(actions)

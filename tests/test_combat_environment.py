@@ -6,7 +6,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
+from beyond_all_reason_environment.combat_configuration import COMMANDS, AllyteamConfiguration, CombatConfiguration
 from beyond_all_reason_environment.combat_environment import (
     CONTEXT_FEATURES,
     CombatEnvironment,
@@ -162,7 +162,12 @@ def test_team_reward_counts_damage_kills_and_victory():
 
 
 def test_spawns_put_agents_first_facing_the_opponent():
-    configuration = CombatConfiguration(agent_units={"armpw": 3}, opponent_units={"corak": 2})
+    configuration = CombatConfiguration(
+        allyteams=[
+            AllyteamConfiguration(units={"armpw": 3}),
+            AllyteamConfiguration(units={"corak": 2}),
+        ]
+    )
     spawns = spawn_positions(configuration, np.random.default_rng(0))
 
     assert [spawn["team"] for spawn in spawns] == [0, 0, 0, 1, 1]
