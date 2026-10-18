@@ -18,10 +18,20 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment import Agent, AttackNearest, DoNothing, HoldAndFire, Passive, scenarios
-from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
+from beyond_all_reason_environment import (
+    Agent,
+    AttackNearest,
+    DoNothing,
+    EngineConfiguration,
+    GameConfiguration,
+    GraphicsConfiguration,
+    HoldAndFire,
+    Passive,
+    ReinforcementLearningEnvironmentConfiguration,
+    scenarios,
+)
 from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
-from beyond_all_reason_environment.engine_configuration import EngineConfiguration
+from beyond_all_reason_environment.reinforcement_learning_environment_configuration import COMMANDS
 
 ATTACK = COMMANDS.index("attack")
 # Agent: the opponents are agents too, playing the same policy (self-play).
@@ -59,14 +69,13 @@ def main() -> None:
     arguments = parser.parse_args()
 
     scenario = getattr(scenarios, arguments.scenario)
-    for index in range(len(scenario.teams)):
-        if index not in scenario.agent_teams:
-            scenario = scenario.with_controller(index, OPPONENTS[arguments.opponent])
-    configuration = CombatConfiguration(
-        scenario=scenario,
+    # The agents play team 0, the opponent controller every other team.
+    controllers = [Agent(), *[OPPONENTS[arguments.opponent]] * (len(scenario.teams) - 1)]
+    configuration = ReinforcementLearningEnvironmentConfiguration(
+        game=GameConfiguration(scenario, controllers),
         engine=EngineConfiguration(
-            graphical=arguments.graphical,
-            speed=arguments.speed or (1.0 if arguments.graphical else 1000.0),
+            speed=arguments.speed,
+            graphics=GraphicsConfiguration() if arguments.graphical else None,
             keep_run_directory=arguments.keep_run_directory,
         ),
     )

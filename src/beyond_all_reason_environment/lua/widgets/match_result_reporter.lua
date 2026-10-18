@@ -55,7 +55,8 @@ end
 function widget:GameOver(winningAllyTeams)
 	writeResult(true, winningAllyTeams)
 	Spring.Echo("[Match Result Reporter] game over at frame " .. Spring.GetGameFrame())
-	-- Without graphics, skip the game's autoquit countdown; with graphics, let the viewer see the end screen.
+	-- Without graphics, skip the game's autoquit countdown; with graphics, the viewer sees the end screen and
+	-- graphics_settings.lua closes the window after its delay.
 	if Platform.isHeadless then
 		Spring.SendCommands("quitforce")
 	end

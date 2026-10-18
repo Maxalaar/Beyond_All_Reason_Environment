@@ -108,13 +108,14 @@ from datetime import datetime
 import numpy as np
 from gymnasium import spaces
 
-from .combat_configuration import COMMANDS, CombatConfiguration
 from .controllers import DoNothing
 from .environment import CONNECTION_TIMEOUT_SECONDS, Environment
+from .game import controller_mod_options, unit_states
 from .game_extension import extension_game_name
 from .installation import build_bridge_ai
 from .match import RUNS_DIRECTORY, start_engine
-from .scenario import controller_mod_options, spawn_positions, unit_states
+from .reinforcement_learning_environment_configuration import COMMANDS, ReinforcementLearningEnvironmentConfiguration
+from .scenario import spawn_positions
 from .start_script import FRAMES_PER_SECOND, MatchConfiguration
 
 COMMAND_STATES = ("none", "move", "fight", "attack", "stop", "other")
@@ -137,10 +138,10 @@ CONTEXT_FEATURES = [
 ]
 
 
-def chassis_feature_names(configuration: CombatConfiguration) -> list[str]:
+def chassis_feature_names(configuration: ReinforcementLearningEnvironmentConfiguration) -> list[str]:
     """Static features of any entity: type, health capacity, armor, mobility and scale."""
     return [
-        *(f"type_{name}" for name in configuration.scenario.unit_types),
+        *(f"type_{name}" for name in configuration.game.scenario.unit_types),
         "maximum_health_thousands",
         *(f"armor_type_{i}" for i in range(NUMBER_OF_ARMOR_TYPES)),
         "speed_x",
@@ -187,14 +188,14 @@ def weapon_feature_names() -> list[str]:
 def _chassis_features(
     unit: dict,
     unit_type: dict,
-    configuration: CombatConfiguration,
+    configuration: ReinforcementLearningEnvironmentConfiguration,
 ) -> list[float]:
     armor_t = int(unit_type.get("armor_type", 0))
     speed = unit_type.get("speed", 0.0)
     weapon_range = unit_type.get("weapon_range", 0.0)
     sight = unit_type.get("sight", 0.0)
     return [
-        *(float(unit["unit"] == name) for name in configuration.scenario.unit_types),
+        *(float(unit["unit"] == name) for name in configuration.game.scenario.unit_types),
         unit_type.get("maximum_health", 1.0) / 1000.0,
         *(float(armor_t == i) for i in range(NUMBER_OF_ARMOR_TYPES)),
         speed / DISTANCE_SCALE,
@@ -210,7 +211,7 @@ def _chassis_features(
 def _state_features(
     unit: dict,
     observer: dict,
-    configuration: CombatConfiguration,
+    configuration: ReinforcementLearningEnvironmentConfiguration,
     map_size: tuple[float, float],
     allyteam_id_normalized: float = 0.0,
 ) -> list[float]:
@@ -253,7 +254,9 @@ def _weapon_features(weapon: dict, decision_interval: int) -> list[float]:
     ]
 
 
-def _unit_weapons(unit_type: dict, configuration: CombatConfiguration) -> tuple[np.ndarray, np.ndarray]:
+def _unit_weapons(
+    unit_type: dict, configuration: ReinforcementLearningEnvironmentConfiguration
+) -> tuple[np.ndarray, np.ndarray]:
     n_weapon = len(weapon_feature_names())
     max_weapons = configuration.observation.maximum_weapons_per_unit
     matrix = np.zeros((max_weapons, n_weapon), dtype=np.float32)
@@ -267,7 +270,7 @@ def _unit_weapons(unit_type: dict, configuration: CombatConfiguration) -> tuple[
 def _context_features(
     episode_frame: int,
     frames_since_previous_decision: int,
-    configuration: CombatConfiguration,
+    configuration: ReinforcementLearningEnvironmentConfiguration,
     map_size: tuple[float, float],
 ) -> list[float]:
     size_x, size_z = map_size
@@ -275,7 +278,7 @@ def _context_features(
         size_x / 1000,
         size_z / 1000,
         size_x / size_z,
-        episode_frame / configuration.scenario.maximum_game_frames,
+        episode_frame / configuration.game.scenario.maximum_game_frames,
         frames_since_previous_decision / configuration.action.decision_interval_frames,
     ]
 
@@ -296,7 +299,7 @@ def encode_observation(
     raw: dict,
     unit_id: int,
     unit_name: str,
-    configuration: CombatConfiguration,
+    configuration: ReinforcementLearningEnvironmentConfiguration,
     map_size: tuple[float, float],
     allyteams: list[int] | None = None,
 ) -> dict[str, np.ndarray]:
@@ -306,7 +309,7 @@ def encode_observation(
     alliance, enemies those of the other alliances, whose current orders are hidden.
     """
     if allyteams is None:
-        allyteams = configuration.scenario.allyteams
+        allyteams = configuration.game.scenario.allyteams
     n_chassis = len(chassis_feature_names(configuration))
     n_state = len(state_feature_names())
     max_ally = configuration.observation.maximum_ally_units
@@ -463,7 +466,7 @@ def team_reward(
     initial_enemy_health: float,
     initial_ally_health: float,
     initial_enemies: int,
-    configuration: CombatConfiguration,
+    configuration: ReinforcementLearningEnvironmentConfiguration,
     ally_teams: set[int],
 ) -> float:
     """Reward of one step for the alliance made of ``ally_teams``, from the unit states before and after it."""
@@ -484,9 +487,10 @@ def team_reward(
     reward = weights.damage_dealt * health_lost(False) / max(initial_enemy_health, 1e-9)
     reward -= weights.damage_received * health_lost(True) / max(initial_ally_health, 1e-9)
     reward += weights.kill * (enemies_before - enemies_after) / max(initial_enemies, 1)
-    if enemies_after == 0 and enemies_before > 0:
+    # Both sides wiped out in the same step is a draw: neither victory nor defeat.
+    if enemies_after == 0 and enemies_before > 0 and allies_after > 0:
         reward += weights.victory
-    elif allies_after == 0:
+    elif allies_after == 0 and enemies_after > 0:
         reward += weights.defeat
     return float(reward)
 
@@ -529,15 +533,16 @@ class CombatEnvironment(Environment):
 
     metadata = {"name": "beyond_all_reason_combat"}
 
-    def __init__(self, configuration: CombatConfiguration | None = None):
-        self.configuration = configuration or CombatConfiguration()
+    def __init__(self, configuration: ReinforcementLearningEnvironmentConfiguration | None = None):
+        self.configuration = configuration or ReinforcementLearningEnvironmentConfiguration()
         super().__init__(self.configuration.engine)
-        scenario = self.configuration.scenario
+        game = self.configuration.game
+        scenario = game.scenario
         # One agent per unit of every team the agents play: "team<t>_unit_<k>".
         self.possible_agents: list[str] = []
         self.agent_unit_names: list[str] = []
         self.agent_teams: list[int] = []
-        for team_index in scenario.agent_teams:
+        for team_index in game.agent_teams:
             names = [name for name, count in (scenario.teams[team_index].units or {}).items() for _ in range(count)]
             self.possible_agents += [f"team{team_index}_unit_{rank}" for rank in range(len(names))]
             self.agent_unit_names += names
@@ -672,11 +677,10 @@ class CombatEnvironment(Environment):
         """The BridgeAI on the first agent team (it talks to Python for every agent team); NullAI on the other agent
         teams, whose orders the gadget gives; each other team's own controller."""
         configuration = self.configuration
-        scenario = configuration.scenario
+        game = configuration.game
         players = []
-        for index, team in enumerate(scenario.teams):
-            player = team.player()
-            if index == scenario.agent_teams[0]:
+        for index, (team, player) in enumerate(zip(game.scenario.teams, game.players(), strict=True)):
+            if index == game.agent_teams[0]:
                 player = replace(
                     player,
                     options={
@@ -687,7 +691,7 @@ class CombatEnvironment(Environment):
                         "terrain_h": str(configuration.observation.terrain_resolution[1]),
                     },
                 )
-            elif index in scenario.agent_teams:
+            elif index in game.agent_teams:
                 player = replace(DoNothing().player(team.side), label=player.label)
             players.append(player)
         return players
@@ -703,18 +707,18 @@ class CombatEnvironment(Environment):
         match_configuration = MatchConfiguration(
             players=self._players(port),
             allyteams=self._allyteams,
-            map_name=configuration.scenario.map_name,  # pyright: ignore[reportArgumentType]  (checked: one map)
-            flat_map_squares=configuration.scenario.flat_map_squares,
+            map_name=configuration.game.scenario.map_name,  # pyright: ignore[reportArgumentType]  (checked: one map)
+            flat_map_squares=configuration.game.scenario.flat_map_squares,
             game_version=extension_game_name(),
-            speed=configuration.engine.speed,
+            speed=configuration.engine.effective_speed,
             maximum_game_minutes=1_000_000,
             extra_mod_options={
                 "deathmode": "neverend",
-                "reinforcement_learning_full_vision": "1" if configuration.scenario.full_vision else "0",
-                **controller_mod_options(configuration.scenario),
+                "reinforcement_learning_full_vision": "1" if configuration.game.scenario.full_vision else "0",
+                **controller_mod_options(configuration.game),
             },
         )
-        self._process = start_engine(match_configuration, self.run_directory, graphical=configuration.engine.graphical)
+        self._process = start_engine(match_configuration, self.run_directory, graphics=configuration.engine.graphics)
         try:
             self._connection, _ = self._server.accept()
         except TimeoutError as error:
@@ -785,9 +789,9 @@ class CombatEnvironment(Environment):
         self._episode += 1
         configuration = self.configuration
         states = unit_states(
-            configuration.scenario, (configuration.action.agent_fire_state, configuration.action.agent_move_state)
+            configuration.game, (configuration.action.agent_fire_state, configuration.action.agent_move_state)
         )
-        spawns = spawn_positions(configuration.scenario, self._random)
+        spawns = spawn_positions(configuration.game.scenario, self._random)
         self._send({"type": "reset", "episode": self._episode, "spawns": spawns, "states": states})
         raw = self._receive_observation()
         spawned = [int(identifier) for identifier in str(raw["spawned_units"]).split(",")]
@@ -844,7 +848,7 @@ class CombatEnvironment(Environment):
         alive_units = {u["id"] for u in raw["units"]}
         # The episode ends when one alliance at most still has units.
         episode_over = len({self._allyteams[u["team"]] for u in raw["units"]}) <= 1
-        time_over = raw["episode_frame"] >= self.configuration.scenario.maximum_game_frames
+        time_over = raw["episode_frame"] >= self.configuration.game.scenario.maximum_game_frames
 
         observations = self._observations(raw)
         rewards = {agent: rewards_by_allyteam[self._allyteam_of(agent)] for agent in self.agents}

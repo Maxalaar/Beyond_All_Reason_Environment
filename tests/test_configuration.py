@@ -7,24 +7,29 @@ from pathlib import Path
 import pytest
 
 from beyond_all_reason_environment import (
+    Agent,
     ArtificialIntelligencePlayer,
     AttackNearest,
-    BatchConfiguration,
     BuiltInArtificialIntelligence,
+    GameConfiguration,
+    GraphicsConfiguration,
     MatchConfiguration,
+    Passive,
+    RunConfiguration,
     ScenarioConfiguration,
     TeamConfiguration,
 )
-from beyond_all_reason_environment.batch import (
+from beyond_all_reason_environment.game_extension import extension_game_name
+from beyond_all_reason_environment.installation import GAME_VERSION
+from beyond_all_reason_environment.match import engine_settings, write_graphics_widget
+from beyond_all_reason_environment.run import (
     DEFAULT_CONFIGURATION_FILE,
     add_configuration_arguments,
     configuration_from_arguments,
-    load_batch_configuration,
+    load_run_configuration,
     new_version_directory,
     save_configuration,
 )
-from beyond_all_reason_environment.game_extension import extension_game_name
-from beyond_all_reason_environment.installation import GAME_VERSION
 from beyond_all_reason_environment.scenarios import one_versus_one
 from beyond_all_reason_environment.start_script import build_start_script
 
@@ -32,11 +37,10 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 TWO_SIDES = ["Armada", "Cortex"]
 
 
-def scenario(sides: list = TWO_SIDES, **fields) -> ScenarioConfiguration:
+def game(sides: list = TWO_SIDES, **fields) -> GameConfiguration:
     """BARb with a normal start (commander) for each side."""
-    return ScenarioConfiguration(
-        teams=[TeamConfiguration(BuiltInArtificialIntelligence("BARb"), side=side) for side in sides], **fields
-    )
+    scenario = ScenarioConfiguration(teams=[TeamConfiguration(side=side) for side in sides], **fields)
+    return GameConfiguration(scenario, controllers=[BuiltInArtificialIntelligence("BARb")] * len(sides))
 
 
 def test_start_script_lifts_speed_limit_and_stops_at_time_limit():
@@ -48,14 +52,14 @@ def test_start_script_lifts_speed_limit_and_stops_at_time_limit():
 
 
 def test_each_player_keeps_its_side_and_seeds_follow():
-    batch = BatchConfiguration(name="test", scenario=scenario(), matches=3)
+    batch = RunConfiguration(name="test", game=game(), matches=3)
     matches = batch.match_configurations()
     assert [[player.side for player in match.players] for match in matches] == [["Armada", "Cortex"]] * 3
     assert [match.seed for match in matches] == [1, 2, 3]
 
 
 def test_list_of_sides_is_drawn_reproducibly_per_match():
-    batch = BatchConfiguration(name="test", scenario=scenario([["Armada", "Cortex", "Legion"], "Armada"]), matches=30)
+    batch = RunConfiguration(name="test", game=game([["Armada", "Cortex", "Legion"], "Armada"]), matches=30)
     drawn = [match.players[0].side for match in batch.match_configurations()]
     assert drawn == [match.players[0].side for match in batch.match_configurations()]
     assert set(drawn) == {"Armada", "Cortex", "Legion"}
@@ -75,20 +79,19 @@ def test_unknown_side_is_rejected():
 @pytest.mark.parametrize(
     "build",
     [
-        lambda: BatchConfiguration(name="has space", scenario=scenario()),
-        lambda: BatchConfiguration(name="test", scenario=scenario(TWO_SIDES[:1])),
-        lambda: BatchConfiguration(name="test", scenario=scenario(), parallel=0),
+        lambda: RunConfiguration(name="has space", game=game()),
+        lambda: RunConfiguration(name="test", game=game(TWO_SIDES[:1])),
+        lambda: RunConfiguration(name="test", game=game(), parallel=0),
         # Nobody would play the agent without Python.
-        lambda: BatchConfiguration(name="test", scenario=one_versus_one),
+        lambda: RunConfiguration(name="test", game=GameConfiguration(one_versus_one, [Agent(), Passive()])),
         # Match statistics count one team per alliance.
-        lambda: BatchConfiguration(
+        lambda: RunConfiguration(
             name="test",
-            scenario=ScenarioConfiguration(
-                teams=[
-                    TeamConfiguration(BuiltInArtificialIntelligence("BARb"), allyteam=0),
-                    TeamConfiguration(BuiltInArtificialIntelligence("BARb"), allyteam=0),
-                    TeamConfiguration(BuiltInArtificialIntelligence("BARb")),
-                ]
+            game=GameConfiguration(
+                ScenarioConfiguration(
+                    teams=[TeamConfiguration(allyteam=0), TeamConfiguration(allyteam=0), TeamConfiguration()]
+                ),
+                controllers=[BuiltInArtificialIntelligence("BARb")] * 3,
             ),
         ),
     ],
@@ -102,14 +105,14 @@ def test_placed_units_and_commanders_do_not_mix():
     with pytest.raises(ValueError, match="placed units"):
         ScenarioConfiguration(
             teams=[
-                TeamConfiguration(AttackNearest(), units={"armpw": 1}),
-                TeamConfiguration(AttackNearest()),
+                TeamConfiguration(units={"armpw": 1}),
+                TeamConfiguration(),
             ],
         )
 
 
 def test_a_scenario_with_placed_units_is_set_up_by_the_game_extension():
-    batch = BatchConfiguration(name="test", scenario=one_versus_one.with_controller(0, AttackNearest()))
+    batch = RunConfiguration(name="test", game=GameConfiguration(one_versus_one, [AttackNearest(), Passive()]))
     match = batch.match_configuration(0)
     assert [player.display_name for player in match.players] == ["AttackNearest", "Passive"]
     assert match.game_version == extension_game_name()
@@ -123,20 +126,20 @@ def test_a_scenario_with_placed_units_is_set_up_by_the_game_extension():
 
 
 def test_a_normal_start_uses_the_plain_game():
-    match = BatchConfiguration(name="test", scenario=scenario()).match_configuration(0)
+    match = RunConfiguration(name="test", game=game()).match_configuration(0)
     assert (match.game_version, match.extra_mod_options) == (GAME_VERSION, {})
 
 
 def test_configuration_files_load():
-    for path in (REPOSITORY_ROOT / "configurations" / "matches").glob("*.py"):
-        assert isinstance(load_batch_configuration(path), BatchConfiguration)
+    for path in (REPOSITORY_ROOT / "configurations" / "runs").glob("*.py"):
+        assert isinstance(load_run_configuration(path), RunConfiguration)
 
 
 def test_file_without_configuration_variable_is_rejected(tmp_path):
     path = tmp_path / "empty.py"
     path.write_text("x = 1\n")
     with pytest.raises(ValueError, match="configuration"):
-        load_batch_configuration(path)
+        load_run_configuration(path)
 
 
 def test_each_run_of_a_name_gets_a_new_version(tmp_path):
@@ -146,7 +149,7 @@ def test_each_run_of_a_name_gets_a_new_version(tmp_path):
 
 
 def test_list_of_maps_is_shared_equally():
-    batch = BatchConfiguration(name="test", scenario=scenario(map_name=["Small", "Medium", "Large"]), matches=6)
+    batch = RunConfiguration(name="test", game=game(map_name=["Small", "Medium", "Large"]), matches=6)
     maps = [match.map_name for match in batch.match_configurations()]
     assert maps == ["Small", "Medium", "Large"] * 2
 
@@ -158,28 +161,28 @@ def parse(command_line: list[str]) -> argparse.Namespace:
 
 
 def test_without_file_the_default_configuration_is_used():
-    assert configuration_from_arguments(parse([])) == load_batch_configuration(DEFAULT_CONFIGURATION_FILE)
+    assert configuration_from_arguments(parse([])) == load_run_configuration(DEFAULT_CONFIGURATION_FILE)
 
 
 def test_command_line_replaces_only_the_fields_given():
-    path = REPOSITORY_ROOT / "configurations" / "matches" / "barb_versus_barb.py"
-    file = load_batch_configuration(path)
+    path = REPOSITORY_ROOT / "configurations" / "runs" / "barb_versus_barb.py"
+    file = load_run_configuration(path)
     configuration = configuration_from_arguments(
         parse([str(path), "--matches", "3", "--maximum_game_minutes", "2.5", "--no-record_replays"])
     )
     assert (configuration.matches, configuration.record_replays) == (3, False)
-    assert configuration.scenario.maximum_game_minutes == 2.5
-    assert (configuration.name, configuration.parallel, configuration.scenario.players) == (
+    assert configuration.game.scenario.maximum_game_minutes == 2.5
+    assert (configuration.name, configuration.parallel, configuration.game.controllers) == (
         file.name,
         file.parallel,
-        file.scenario.players,
+        file.game.controllers,
     )
 
 
 def test_one_map_stays_a_name_and_several_make_a_list():
-    assert configuration_from_arguments(parse(["--map_name", "Small"])).scenario.map_name == "Small"
+    assert configuration_from_arguments(parse(["--map_name", "Small"])).game.scenario.map_name == "Small"
     several = configuration_from_arguments(parse(["--map_name", "Small", "Large"]))
-    assert several.scenario.map_name == ["Small", "Large"]
+    assert several.game.scenario.map_name == ["Small", "Large"]
 
 
 def test_replaced_values_are_checked_like_the_file():
@@ -188,7 +191,7 @@ def test_replaced_values_are_checked_like_the_file():
 
 
 def test_one_match_of_a_series_matches_the_batch_and_may_go_beyond_it():
-    batch = BatchConfiguration(name="test", scenario=scenario(map_name=["Small", "Large"]), matches=2, first_seed=5)
+    batch = RunConfiguration(name="test", game=game(map_name=["Small", "Large"]), matches=2, first_seed=5)
     assert batch.match_configuration(1) == batch.match_configurations()[1]
     beyond = batch.match_configuration(2)
     assert (beyond.seed, beyond.map_name) == (7, "Small")
@@ -199,3 +202,27 @@ def test_saved_configuration_has_the_values_after_the_command_line(tmp_path):
     save_configuration(tmp_path, configuration_from_arguments(arguments), arguments)
     assert json.loads((tmp_path / "configuration.json").read_text())["configuration"]["matches"] == 3
     assert (tmp_path / "configuration.py").read_text() == DEFAULT_CONFIGURATION_FILE.read_text()
+
+
+def test_graphics_come_from_the_file_and_the_command_line_replaces_them():
+    headless = configuration_from_arguments(parse([]))
+    assert headless.engine.graphics is None and headless.engine.effective_speed == 1000
+    watched = configuration_from_arguments(parse(["--graphical", "--sound", "--camera_keys", "wasd"]))
+    assert watched.engine.graphics == GraphicsConfiguration(sound=True, camera_keys="wasd")
+    # Real time with a window, one game at a time.
+    assert (watched.engine.effective_speed, watched.games_at_once) == (1.0, 1)
+    assert watched.match_configuration(0).speed == 1.0
+    path = REPOSITORY_ROOT / "configurations" / "runs" / "one_versus_one_attack_nearest.py"
+    assert load_run_configuration(path).engine.graphics is not None
+    assert configuration_from_arguments(parse([str(path), "--no-graphical"])).engine.graphics is None
+
+
+def test_graphics_settings_reach_the_engine_and_the_widget(tmp_path):
+    settings = engine_settings(GraphicsConfiguration())
+    assert (settings["Fullscreen"], settings["WindowBorderless"], settings["Sound"]) == ("0", "1", "0")
+    assert engine_settings(GraphicsConfiguration(fullscreen=False, sound=True))["XResolutionWindowed"] == "1600"
+    write_graphics_widget(tmp_path, GraphicsConfiguration(camera_keys="zqsd", close_delay_seconds=2.5))
+    widget = (tmp_path / "graphics_settings.lua").read_text()
+    assert 'local CAMERA_KEYS = "zqsd"' in widget and "local CLOSE_DELAY_SECONDS = 2.5" in widget
+    with pytest.raises(ValueError):
+        GraphicsConfiguration(camera_keys="zq")

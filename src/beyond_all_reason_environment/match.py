@@ -10,6 +10,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from .engine_configuration import GraphicsConfiguration
 from .flat_map import ensure_flat_map
 from .game_extension import extension_game_name, write_game_extension
 from .installation import GAME_DATA_DIRECTORY, GRAPHICAL_EXECUTABLE, HEADLESS_EXECUTABLE, REPOSITORY_ROOT
@@ -55,12 +56,9 @@ class MatchResult:
         return None if self.game_frames is None else self.game_frames / FRAMES_PER_SECOND / self.wall_clock_seconds
 
 
-# Window settings for graphical matches, written to the run folder's engine configuration.
-GRAPHICAL_SETTINGS = {
-    "Fullscreen": "0",
-    "XResolutionWindowed": "1600",
-    "YResolutionWindowed": "900",
-}
+# Window size when GraphicsConfiguration.fullscreen is False.
+WINDOW_SIZE = (1600, 900)
+GRAPHICS_WIDGET = Path(__file__).parent / "lua" / "graphics_widgets" / "graphics_settings.lua"
 
 # On laptops with hybrid graphics, render on the NVIDIA card instead of the integrated one (about 2x faster).
 # Offloading goes through GLX, hence X11 (XWayland under Wayland).
@@ -94,10 +92,24 @@ def graphics_library_path() -> str:
     return f"{path}:{SYSTEM_OPENGL_LIBRARY_DIRECTORY}"
 
 
-def graphical_environment(write_directory: Path) -> dict[str, str]:
+def engine_settings(graphics: GraphicsConfiguration) -> dict[str, str]:
+    """Engine settings (springsettings.cfg) for the window and the sound."""
+    if graphics.fullscreen:
+        # A borderless window at the desktop's resolution (0), more reliable than exclusive full screen with
+        # hybrid graphics.
+        window = {"Fullscreen": "0", "WindowBorderless": "1", "WindowPosX": "0", "WindowPosY": "0"}
+        window |= {"XResolutionWindowed": "0", "YResolutionWindowed": "0"}
+    else:
+        width, height = WINDOW_SIZE
+        window = {"Fullscreen": "0", "XResolutionWindowed": str(width), "YResolutionWindowed": str(height)}
+    return {**window, "Sound": "1" if graphics.sound else "0"}
+
+
+def graphical_environment(write_directory: Path, graphics: GraphicsConfiguration | None = None) -> dict[str, str]:
     """Environment and window settings for the graphical engine binary, writing into ``write_directory``."""
+    settings = engine_settings(graphics or GraphicsConfiguration())
     (write_directory / "springsettings.cfg").write_text(
-        "".join(f"{key} = {value}\n" for key, value in GRAPHICAL_SETTINGS.items())
+        "".join(f"{key} = {value}\n" for key, value in settings.items())
     )
     environment = {
         **os.environ,
@@ -128,12 +140,23 @@ def _tidy_run_directory(run_directory: Path, keep_engine_files: bool) -> None:
             path.unlink()
 
 
-def start_engine(configuration: MatchConfiguration, run_directory: Path, graphical: bool = False) -> subprocess.Popen:
+def write_graphics_widget(widgets_directory: Path, graphics: GraphicsConfiguration) -> None:
+    """The widget of lua/graphics_widgets/ with the camera keys and the closing delay of ``graphics``."""
+    text = GRAPHICS_WIDGET.read_text()
+    text = text.replace('local CAMERA_KEYS = ""\n', f'local CAMERA_KEYS = "{graphics.camera_keys or ""}"\n')
+    delay = -1 if graphics.close_delay_seconds is None else graphics.close_delay_seconds
+    text = text.replace("local CLOSE_DELAY_SECONDS = -1\n", f"local CLOSE_DELAY_SECONDS = {delay:g}\n")
+    (widgets_directory / GRAPHICS_WIDGET.name).write_text(text)
+
+
+def start_engine(
+    configuration: MatchConfiguration, run_directory: Path, graphics: GraphicsConfiguration | None = None
+) -> subprocess.Popen:
     """Prepare ``run_directory`` (widgets, game extension, start script) and start the engine on it without waiting.
 
-    The engine output goes to engine_output.log in the run folder.
+    With ``graphics`` a window shows the game. The engine output goes to engine_output.log in the run folder.
     """
-    executable = GRAPHICAL_EXECUTABLE if graphical else HEADLESS_EXECUTABLE
+    executable = HEADLESS_EXECUTABLE if graphics is None else GRAPHICAL_EXECUTABLE
     if not executable.exists():
         raise FileNotFoundError("Engine missing: run scripts/download_game_data.py first.")
     run_directory.mkdir(parents=True, exist_ok=True)
@@ -142,6 +165,8 @@ def start_engine(configuration: MatchConfiguration, run_directory: Path, graphic
     widgets_directory.mkdir(parents=True, exist_ok=True)
     for widget in LUA_WIDGETS_DIRECTORY.glob("*.lua"):
         shutil.copy(widget, widgets_directory)
+    if graphics is not None:
+        write_graphics_widget(widgets_directory, graphics)
 
     if configuration.game_version == extension_game_name():
         write_game_extension(run_directory)
@@ -152,8 +177,8 @@ def start_engine(configuration: MatchConfiguration, run_directory: Path, graphic
     script_path.write_text(build_start_script(configuration))
 
     # The run folder is the write directory (logs, results); the shared game_data folder is read-only.
-    if graphical:
-        environment = graphical_environment(run_directory)
+    if graphics is not None:
+        environment = graphical_environment(run_directory, graphics)
     else:
         environment = {**os.environ, "SPRING_DATADIR": str(GAME_DATA_DIRECTORY)}
     with open(run_directory / "engine_output.log", "w") as log_file:
@@ -170,14 +195,14 @@ def start_engine(configuration: MatchConfiguration, run_directory: Path, graphic
 def run_match(
     configuration: MatchConfiguration,
     run_directory: Path | None = None,
-    graphical: bool = False,
+    graphics: GraphicsConfiguration | None = None,
 ) -> MatchResult:
-    """Run a match to the end. With ``graphical=True`` a window shows it, at ``configuration.speed``."""
+    """Run a match to the end. With ``graphics`` a window shows it, at ``configuration.speed``."""
     if run_directory is None:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         run_directory = RUNS_DIRECTORY / f"{timestamp}_seed{configuration.seed}"
     start_time = time.monotonic()
-    start_engine(configuration, run_directory, graphical).wait()
+    start_engine(configuration, run_directory, graphics).wait()
     wall_clock_seconds = time.monotonic() - start_time
     _tidy_run_directory(run_directory, configuration.keep_engine_files)
     return read_match_result(run_directory, len(configuration.players), wall_clock_seconds)

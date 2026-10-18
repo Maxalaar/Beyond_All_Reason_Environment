@@ -16,7 +16,7 @@
 --         the first index on; responses are capped near 9 kB, so the answer starts with the next index to ask
 --         for, or -1 when complete: "<next index>|<entries>".
 --
--- 2. A match without Python (batch.py): the mod option reinforcement_learning_scenario holds the same spawns and
+-- 2. A game without Python (run.py, game.game_mod_options): the mod option reinforcement_learning_scenario holds the same spawns and
 --    states, "<team>,<unit>,<x>,<z>/...|<t0_fire>,<t0_move>,...", applied once at SETUP_FRAME. Spawns are separated
 --    by "/" there because ";" ends a value in the start script.
 --

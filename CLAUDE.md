@@ -30,12 +30,12 @@ so the environment must match its interface (to confirm).
 - Later: imitation pre-training on Beyond All Reason's public replays (.sdfz), AlphaStar-style.
 
 ## Roadmap (start small)
-- [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (one match of a configuration headless →
-      winner, `--graphical` to watch), `scripts/run_matches.py configurations/matches/<file>.py`
-      (Python file defining `configuration = BatchConfiguration(...)`; parallel batch, statistics and
-      charts into `runs/<name>/`; `batch.py`, `plots.py`). Both take the same file (default barb_versus_barb.py)
-      and `--<field> <value>` replaces any field but `players` (generated from the dataclass fields in
-      `batch.add_configuration_arguments`); `run_matches.py` saves the values used in configuration.json.
+- [x] Step 0: `scripts/download_game_data.py`, `scripts/run.py configurations/runs/<file>.py` (Python file defining
+      `configuration = RunConfiguration(...)`; one game or a parallel series, statistics and charts into
+      `runs/<name>/`; `run.py`, `plots.py`; run_match.py and run_matches.py were merged into it on 2026-10-18).
+      Default file barb_versus_barb.py; `--<field> <value>` replaces the simple fields of the run, scenario, engine
+      and window (generated from the dataclass fields in `run.add_configuration_arguments`), `--graphical`,
+      `--match_index`; the values used are saved in configuration.json.
 - [ ] Micro environment (5 v 5), agreed design below. Phase 0: game extension + Lua <-> Python socket +
       synchronous step(), measure speed [done]; phase 1: scenario gadget [done]; phase 2: Python environment
       (no RLlib) [done: MicroEnvironment];
@@ -63,24 +63,32 @@ so the environment must match its interface (to confirm).
   receiving actions from the widget through Spring.SendLuaRulesMsg.
 
 ## Micro environment, how it works (learned while building it, 2026-10-16)
-- Code (now the combat environment, driven by the native BridgeAI): combat_configuration.py, combat_environment.py,
+- Code (now the combat environment, driven by the native BridgeAI): reinforcement_learning_environment_configuration.py,
+  combat_environment.py, game.py, scenario.py, controllers.py,
   combat_multi_agent_environment.py (RLlib wrapper, extra "rllib"), engine_configuration.py, scenarios/, flat_map.py,
   game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_combat_environment.py,
   tests/test_combat_environment.py (`pytest -m engine` for the end-to-end test).
-- Configuration layout (agreed 2026-10-18): one scenario type for everything (scenario.py, ScenarioConfiguration:
-  map, time limit, teams = TeamConfiguration(controller, side, units, allyteam)), no "combat" vs "match" split.
-  CombatConfiguration = scenario + observation + action + rewards + engine; BatchConfiguration = scenario + series
-  parameters (matches, parallel, seeds, replays). Scenarios (scenarios/<name>.py, variable named like the file)
-  define only the scenario; the experiment (training configuration in Maxalaar_Reinforcement_Learning,
-  configurations/beyond_all_reason/) chooses observation, action and rewards. Each team has a controller
+- Configuration layout (agreed 2026-10-18, names chosen by the user): ScenarioConfiguration (scenario.py: the
+  situation; map, time limit, teams = TeamConfiguration(side, units, allyteam), no controllers) -> GameConfiguration
+  (game.py: scenario + controllers, one per team) -> RunConfiguration (run.py: game + matches, parallel, seeds,
+  replays, engine; games without Python) or ReinforcementLearningEnvironmentConfiguration
+  (reinforcement_learning_environment_configuration.py: game + observation + action + rewards + engine; for
+  CombatEnvironment). Scenarios (scenarios/<name>.py, variable named like the file) define only the situation; the
+  experiment (training configuration in Maxalaar_Reinforcement_Learning, configurations/beyond_all_reason/)
+  chooses the controllers, observation, action and rewards. EngineConfiguration(speed None = 1000 headless, 1 with
+  a window; graphics: GraphicsConfiguration | None) is shared; GraphicsConfiguration (sound off, borderless
+  fullscreen, camera_keys "zqsd", close_delay_seconds 5) goes to springsettings.cfg (Sound, WindowBorderless,
+  resolution 0 = desktop) and to lua/graphics_widgets/graphics_settings.lua (copied only with a window: "bind
+  Any+<key> moveforward..." so Alt+keys rotate the Spring camera (moverotate), quitforce after GameOver). BAR's
+  keybind profiles may override a KeybindingFile, hence binds sent from a widget. Each team has a controller
   (controllers.py, agreed 2026-10-18: DoNothing, Passive, HoldAndFire, AttackNearest, BuiltInArtificialIntelligence,
   Agent) and a side; a controller gives the engine AI (NullAI for scripted ones), the placed units' states and an
   optional gadget script (mod option reinforcement_learning_controllers, "team,script,params/..."; SCRIPTS table in
-  the gadget). with_controller(0, AttackNearest()) runs an agent scenario as matches. Planned later: a PythonPolicy
+  the gadget). GameConfiguration(scenario, [AttackNearest(), Passive()]) runs an agent scenario as games. Planned later: a PythonPolicy
   controller (a Python policy or a trained checkpoint through a BridgeAI, for the evaluation league).
   ArtificialIntelligencePlayer.label/display_name names players in charts and tables. Observation counts left to None follow
   the scenario. Armor types are the constant NUMBER_OF_ARMOR_TYPES (checked against the engine at start).
-  Match series live in configurations/matches/ (one team per alliance: statistics count players as sides).
+  Runs live in configurations/runs/ (one team per alliance: statistics count players as sides).
 - Teams and alliances (agreed 2026-10-18): TeamConfiguration.allyteam groups teams (None = alone);
   ScenarioConfiguration.allyteams numbers them 0.. in order of appearance. Agents are the teams with Agent(), on any
   team and on several (self-play); agents are named team<t>_unit_<k>. One BridgeAI (first agent team) talks to
@@ -124,7 +132,7 @@ so the environment must match its interface (to confirm).
   Measured ≈ x30–45 per match on this machine, ~4.7 GB RAM per match.
 - Our Lua user widgets are copied to `runs/<name>/LuaUI/Widgets/`. User widgets may only write
   in `LuaUI/Config/` or `LuaUI/Widgets/` (`checkUserWritePath` in `luaui/barwidgets.lua`).
-- Graphical mode (`--graphical`, binary `spring`): needs SDL2/X11/OpenAL from `flake.nix`
+- Graphical mode (EngineConfiguration.graphics or `--graphical`, binary `spring`): needs SDL2/X11/OpenAL from `flake.nix`
   (`BEYOND_ALL_REASON_GRAPHICS_LIBRARY_PATH`). Default renderer is the Intel iGPU (≈ x5 max);
   with NVIDIA PRIME offload variables + `SDL_VIDEODRIVER=x11` it uses the RTX (x10 reached).
 - Checks: `ruff format`, `ruff check`, `basedpyright --pythonpath <env>/bin/python`, `pytest` (tests/ never start

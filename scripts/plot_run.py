@@ -10,8 +10,8 @@ import argparse
 import shutil
 from pathlib import Path
 
-from beyond_all_reason_environment.batch import load_batch
 from beyond_all_reason_environment.plots import CHARTS_FOLDER, OVERVIEW_FILE_NAME, plot_batch
+from beyond_all_reason_environment.run import load_batch
 
 
 def main() -> None:

@@ -29,7 +29,6 @@ import numpy as np  # noqa: E402
 from matplotlib.axes import Axes  # noqa: E402
 from matplotlib.ticker import FuncFormatter, MaxNLocator, PercentFormatter  # noqa: E402
 
-from .batch import SUMMARISED_STATISTICS  # noqa: E402
 from .colors import GRID, NEUTRAL_COLOR, PLAYER_COLORS, SURFACE, TEXT_PRIMARY, TEXT_SECONDARY  # noqa: E402
 from .match import MatchResult  # noqa: E402
 from .metrics import (  # noqa: E402
@@ -41,6 +40,7 @@ from .metrics import (  # noqa: E402
     Metric,
     minutes_of,
 )
+from .run import SUMMARISED_STATISTICS  # noqa: E402
 from .start_script import MatchConfiguration  # noqa: E402
 
 # Time step of the aggregated curves, in game minutes.

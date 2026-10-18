@@ -13,8 +13,14 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
+from beyond_all_reason_environment import (
+    Agent,
+    GameConfiguration,
+    Passive,
+    ReinforcementLearningEnvironmentConfiguration,
+)
 from beyond_all_reason_environment.combat_multi_agent_environment import CombatMultiAgentEnvironment
+from beyond_all_reason_environment.reinforcement_learning_environment_configuration import COMMANDS
 from beyond_all_reason_environment.scenarios import one_versus_one
 
 
@@ -43,7 +49,9 @@ def main() -> None:
 
     random = np.random.default_rng(arguments.seed)
 
-    env = CombatMultiAgentEnvironment(env_config={"configuration": CombatConfiguration(scenario=one_versus_one)})
+    game = GameConfiguration(one_versus_one, controllers=[Agent(), Passive()])
+    configuration = ReinforcementLearningEnvironmentConfiguration(game=game)
+    env = CombatMultiAgentEnvironment(env_config={"configuration": configuration})
     print(f"agents: {env.possible_agents}")
     first_agent = env.possible_agents[0]
     print(f"observation_space keys: {sorted(env.observation_spaces[first_agent].spaces)}")

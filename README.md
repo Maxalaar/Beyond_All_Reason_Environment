@@ -22,23 +22,32 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 ## Usage
 
 ```bash
-python scripts/run_match.py                         # one match without graphics, prints the winner
-python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
-python scripts/run_matches.py configurations/matches/barb_versus_barb.py   # several matches, statistics and charts
-python scripts/run_matches.py configurations/matches/barb_versus_barb.py --matches 20 --parallel 2   # replace fields
-python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5   # replay a recorded match
-python scripts/plot_run.py runs/barb_versus_barb/version_1          # redraw all charts of a batch, no replay needed
+python scripts/run.py                                              # one game BARb against BARb, prints the winner
+python scripts/run.py configurations/runs/one_versus_one_attack_nearest.py   # watch a game in a window
+python scripts/run.py configurations/runs/barb_versus_barb.py --matches 20 --parallel 2   # a series, statistics and charts
+python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5   # replay a recorded game
+python scripts/plot_run.py runs/barb_versus_barb/version_1          # redraw all charts of a run, no replay needed
 python scripts/browse_results.py                                    # web interface to browse all results
 ```
 
-`run_matches.py` reads a Python file in `configurations/matches/` that defines
-`configuration = BatchConfiguration(...)`: the name of the run, the scenario, the number of matches, how many run
-in parallel, seeds, replays. The scenario (`ScenarioConfiguration`, predefined ones in
-`beyond_all_reason_environment.scenarios`) says what happens in each match: map, time limit, and the teams
-(`TeamConfiguration`): for each, its controller, its faction (`side`), its alliance (`allyteam`: teams with the same
-number are allies; by default each team is alone) and how it starts: normally (a commander), or with placed units
-(`units`), as in the scenarios of the combat environment. The same scenario serves both. Match series count one
-team per alliance.
+The configuration is made of nested parts, from the situation to how it runs:
+
+```
+ScenarioConfiguration ──► GameConfiguration ──┬──► RunConfiguration                              ──► scripts/run.py
+  (the situation)         (+ who plays        │      (+ number of games, seeds, replays, engine)      (1 or N games)
+                           each team)         │
+                                              └──► ReinforcementLearningEnvironmentConfiguration ──► CombatEnvironment
+                                                     (+ observation, actions, rewards, engine)          (agents, RLlib)
+```
+
+- `ScenarioConfiguration` (predefined ones in `beyond_all_reason_environment.scenarios`): map, time limit, and the
+  teams (`TeamConfiguration`): for each, its faction (`side`), its alliance (`allyteam`: teams with the same number
+  are allies; by default each team is alone) and how it starts: normally (a commander), or with placed units
+  (`units`). It says nothing of who plays.
+- `GameConfiguration(scenario, controllers)`: one controller per team, in the order of `scenario.teams`.
+- `RunConfiguration`: games of a `GameConfiguration` without Python, one or a series in parallel (`matches`,
+  `parallel`, `first_seed`, `record_replays`), and `engine`: speed and window. Runs count one team per alliance.
+- `ReinforcementLearningEnvironmentConfiguration`: the environment for the agents (see below).
 
 | Controller (`controllers.py`) | The team |
 |---|---|
@@ -47,25 +56,31 @@ team per alliance.
 | `HoldAndFire()` | does not move, shoots what comes in range |
 | `AttackNearest(interval_seconds=1.0)` | every interval, each unit attacks the nearest enemy (scripted in the game extension's gadget, no Python) |
 | `BuiltInArtificialIntelligence("BARb")` | an artificial intelligence of the game |
-| `Agent()` | the agents of the combat environment, played from Python (any number of teams: several for self-play) |
+| `Agent()` | the agents of the reinforcement learning environment, played from Python (any number of teams: several for self-play) |
 
-A scenario made for the agents runs in matches once another controller plays their team,
-`one_versus_one.with_controller(0, AttackNearest())` (see `configurations/matches/one_versus_one_attack_nearest.py`).
-Charts and tables name each player after its controller. Each player keeps its color in every chart. Its `side` is
-one faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
-(reproducibly from the seed) and `summary.txt` gives its wins per faction. To compare factions, give
-the teams different factions; to compare controllers, give them different controllers.
-`map_name` is one map or a list: matches then take the maps in turn, so each map gets the same number of
-matches (see `configurations/matches/factions_by_map_size.py`). Download maps first with
+The window is configured in the file too, `engine=EngineConfiguration(graphics=GraphicsConfiguration(...))`:
+`sound` (off by default), `fullscreen` (a borderless window over the screen, else 1600x900), `camera_keys`
+(`"zqsd"` by default: forward, left, back, right; with Alt held they rotate and tilt the camera; `None` keeps the
+game's arrows) and `close_delay_seconds` (the window closes this long after the end, `None` leaves it open).
+`engine.speed` left to `None` is real time with a window and as fast as possible without; games run one at a time
+with a window.
+
+A scenario made for the agents runs as games once another controller plays their team, for example
+`GameConfiguration(one_versus_one, [AttackNearest(), Passive()])` (see
+`configurations/runs/one_versus_one_attack_nearest.py`). Charts and tables name each player after its controller.
+Each player keeps its color in every chart. Its `side` is one faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a
+list of them, in which case each game draws one (reproducibly from the seed) and `summary.txt` gives its wins per
+faction. To compare factions, give the teams different factions; to compare controllers, give them different
+controllers. `map_name` is one map or a list: games then take the maps in turn, so each map gets the same number of
+games (see `configurations/runs/factions_by_map_size.py`). Download maps first with
 `python scripts/download_game_data.py --map "<name>"`. Copy `barb_versus_barb.py` to start a new experiment;
 the editor completes and type-checks the fields.
 
-Both `run_match.py` and `run_matches.py` take the same configuration file (default:
-`configurations/matches/barb_versus_barb.py`), and the simple fields of the series and of its scenario can be
-replaced on the command line with `--<field> <value>`, for example
-`--map_name "Comet Catcher Remake 1.8" --maximum_game_minutes 30 --first_seed 7 --no-record_replays`
-(`--help` lists them). `run_match.py` runs one match of the series, `--match_index <i>` (seed `first_seed + i`,
-map `i % number of maps`), and can show it with `--graphical`. Results go to `runs/<name>/`:
+`scripts/run.py` takes a file of `configurations/runs/` (default: `barb_versus_barb.py`); the simple fields of the
+run, of its scenario, of its engine and of its window can be replaced on the command line with `--<field> <value>`,
+for example `--map_name "Comet Catcher Remake 1.8" --maximum_game_minutes 30 --first_seed 7 --no-record_replays`,
+`--graphical` / `--no-graphical`, `--sound` (`--help` lists them). `--match_index <i>` runs only game i of the run
+(seed `first_seed + i`, map `i % number of maps`). Results go to `runs/<name>/`:
 
 ```
 runs/<name>/
@@ -109,21 +124,23 @@ about 5 GB of memory per match.
 `CombatEnvironment` is a fight between alliances of teams, one agent (`team<t>_unit_<k>`) per unit of every team
 whose controller is `Agent()`, with the parallel interface
 of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces;
-`CombatMultiAgentEnvironment` wraps it for RLlib (`pip install -e ".[rllib]"`). Its `CombatConfiguration` is made
+`CombatMultiAgentEnvironment` wraps it for RLlib (`pip install -e ".[rllib]"`). Its
+`ReinforcementLearningEnvironmentConfiguration` is made
 of separate parts, each answering one question:
 
 | Part | Class | Question |
 |---|---|---|
-| `scenario` | `ScenarioConfiguration` | what happens in the game: map, teams and alliances (`Agent()` on the agents' teams, any other controller elsewhere, allies included), placed units, start positions, episode length; the same class as in matches |
+| `game` | `GameConfiguration` | the scenario (map, teams and alliances, placed units, start positions, episode length) and who plays each team: `Agent()` on the agents' teams, any other controller elsewhere, allies included; the same class as in runs |
 | `observation` | `ObservationConfiguration` | what each agent sees: entity counts (left to `None`, they follow the scenario), weapon slots, terrain grid |
 | `action` | `ActionConfiguration` | what each agent can do: commands per unit type, attack snap radius, decision interval |
 | `rewards` | `RewardWeights` | how the agents are rewarded |
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
 Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`,
-`armada_versus_cortex`) and only define the scenario part: an experiment, for example a training configuration of
-the reinforcement learning library, chooses the scenario and the other parts. Self-play is a scenario with `Agent()`
-on both sides, for example `five_versus_five.with_controller(1, Agent())`.
+`armada_versus_cortex`) and only define the situation: an experiment, for example a training configuration of
+the reinforcement learning library, chooses the scenario, the controllers and the other parts. Self-play is a game
+with `Agent()`
+on both sides, for example `GameConfiguration(five_versus_five, [Agent(), Agent()])`.
 
 Every agent sees the game from its own alliance: allies are the units of its alliance, enemies those of the others
 (alliance numbers in the observation are relative, 0 for its own), the current orders of enemy units are hidden, the
@@ -131,11 +148,16 @@ visibility channel of the terrain is its alliance's (sight ranges, without terra
 alliance's. An episode ends when one alliance at most still has units.
 
 ```python
-from beyond_all_reason_environment.combat_configuration import CombatConfiguration, RewardWeights
+from beyond_all_reason_environment import (
+    Agent, GameConfiguration, Passive, ReinforcementLearningEnvironmentConfiguration, RewardWeights,
+)
 from beyond_all_reason_environment.combat_environment import CombatEnvironment
 from beyond_all_reason_environment.scenarios import one_versus_one
 
-environment = CombatEnvironment(CombatConfiguration(scenario=one_versus_one, rewards=RewardWeights(kill=0.0)))
+configuration = ReinforcementLearningEnvironmentConfiguration(
+    game=GameConfiguration(one_versus_one, controllers=[Agent(), Passive()]), rewards=RewardWeights(kill=0.0)
+)
+environment = CombatEnvironment(configuration)
 ```
 
 ```bash

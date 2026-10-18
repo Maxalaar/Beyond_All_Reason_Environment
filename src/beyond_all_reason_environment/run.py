@@ -1,4 +1,5 @@
-"""Run several matches in parallel, described by a Python configuration file, and summarise them."""
+"""Run games without Python (one, or a series in parallel), described by a Python configuration file, and summarise
+them. Configuration files in configurations/runs/ define one RunConfiguration, named ``configuration``."""
 
 import argparse
 import importlib.util
@@ -10,14 +11,16 @@ import statistics
 import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass, fields, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
 from typing import get_type_hints
 
+from .engine_configuration import EngineConfiguration, GraphicsConfiguration
+from .game import GameConfiguration, game_mod_options
 from .game_extension import extension_game_name
 from .installation import GAME_VERSION, REPOSITORY_ROOT
 from .match import MatchResult, read_match_result, run_match
-from .scenario import ScenarioConfiguration, scenario_mod_options
+from .scenario import ScenarioConfiguration
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration, Side
 
 # Final engine statistics averaged per player in the summary.
@@ -34,66 +37,77 @@ SUMMARISED_STATISTICS = [
 
 
 @dataclass
-class BatchConfiguration:
-    """A series of matches of one scenario. Files in configurations/matches/ define one, named ``configuration``."""
+class RunConfiguration:
+    """Games of one GameConfiguration, without Python: one game, or a series run in parallel."""
 
     # Also the name of the results folder: runs/<name>/version_<n>/, a new version at each run.
     name: str
-    # What happens in each match: map(s), players, how they start, time limit (see scenarios/).
-    scenario: ScenarioConfiguration
-    matches: int = 5
-    # Matches at the same time, about 5 GB of memory each.
+    # The scenario of each game (map(s), teams, how they start, time limit; see scenarios/) and who plays each team.
+    game: GameConfiguration
+    matches: int = 1
+    # Games at the same time, about 5 GB of memory each; one at a time with graphics.
     parallel: int = 4
-    # Match i uses seed first_seed + i.
+    # Game i uses seed first_seed + i.
     first_seed: int = 1
-    # Save a replay of each match (a few hundred kB each), to watch with scripts/watch_replay.py.
+    # Save a replay of each game (a few hundred kB each), to watch with scripts/watch_replay.py.
     record_replays: bool = False
-    # Keep everything the engine writes in each match folder (about 5 MB), for debugging.
+    # Keep everything the engine writes in each game folder (about 5 MB), for debugging.
     keep_engine_files: bool = False
+    # Speed and window (engine.graphics: None without graphics).
+    engine: EngineConfiguration = field(default_factory=EngineConfiguration)
 
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.name):
             raise ValueError(f"name {self.name!r} may only contain letters, digits, _ and -")
         if self.matches < 1 or self.parallel < 1:
             raise ValueError("matches and parallel must be at least 1")
-        if self.scenario.number_of_allyteams != len(self.scenario.teams):
+        scenario = self.game.scenario
+        if scenario.number_of_allyteams != len(scenario.teams):
             raise ValueError(
-                "match statistics count one team per alliance: give each team an alliance of its own (allyteam=None)"
+                "game statistics count one team per alliance: give each team an alliance of its own (allyteam=None)"
             )
-        if self.scenario.has_agents:
+        if self.game.has_agents:
             raise ValueError(
-                "nobody plays the agents in a match without Python: give their team another controller, "
-                "scenario.with_controller(0, AttackNearest()) for example"
+                "nobody plays the agents without Python: give their team another controller, "
+                "game.with_controller(0, AttackNearest()) for example"
             )
 
+    @property
+    def games_at_once(self) -> int:
+        """Games run at the same time: ``parallel``, or one with graphics (one window at a time)."""
+        return 1 if self.engine.graphics is not None else self.parallel
+
     def match_configurations(self) -> list[MatchConfiguration]:
-        """One configuration per match; players with several factions get one drawn from their list."""
+        """One configuration per game; teams with several factions get one drawn from their list."""
         return [self.match_configuration(index) for index in range(self.matches)]
 
     def match_configuration(self, index: int) -> MatchConfiguration:
-        """Match ``index`` of the series: seed first_seed + index, map index % number of maps.
+        """Game ``index`` of the run: seed first_seed + index, map index % number of maps.
 
-        ``index`` may go beyond ``matches``, to run one more match of the same series.
+        ``index`` may go beyond ``matches``, to run one more game of the same run.
         """
         seed = self.first_seed + index
-        scenario = self.scenario
+        game = self.game
+        scenario = game.scenario
         maps = scenario.map_name
-        uses_game_extension = scenario.uses_game_extension
+        uses_game_extension = game.uses_game_extension
+        sides = [_draw_side(team.side, seed, number) for number, team in enumerate(scenario.teams)]
         return MatchConfiguration(
-            players=[team.player(_draw_side(team.side, seed, number)) for number, team in enumerate(scenario.teams)],
+            players=game.players(sides),
             map_name=maps if isinstance(maps, str) else maps[index % len(maps)],
             flat_map_squares=scenario.flat_map_squares,
             game_version=extension_game_name() if uses_game_extension else GAME_VERSION,
             seed=seed,
+            speed=self.engine.effective_speed,
             maximum_game_minutes=scenario.maximum_game_minutes,
             record_replay=self.record_replays,
             keep_engine_files=self.keep_engine_files,
-            extra_mod_options=scenario_mod_options(scenario, seed) if uses_game_extension else {},
+            extra_mod_options=game_mod_options(game, seed) if uses_game_extension else {},
         )
 
 
 def _draw_side(side: Side | list[Side], seed: int, number: int) -> Side:
-    """The faction of team ``number`` in the match with this seed; the same seed always draws the same one."""
+    """The faction of team ``number`` in the game with this seed; the same seed always draws the same one."""
     if isinstance(side, str):
         return side
     return random.Random(f"{seed}:{number}").choice(side)
@@ -117,7 +131,7 @@ def new_version_directory(name_directory: Path) -> Path:
     return directory
 
 
-def load_batch_configuration(path: Path) -> BatchConfiguration:
+def load_run_configuration(path: Path) -> RunConfiguration:
     """Execute a configuration file and return its ``configuration`` variable."""
     specification = importlib.util.spec_from_file_location(f"configuration_{Path(path).stem}", path)
     if specification is None or specification.loader is None:
@@ -125,34 +139,42 @@ def load_batch_configuration(path: Path) -> BatchConfiguration:
     module = importlib.util.module_from_spec(specification)
     specification.loader.exec_module(module)
     configuration = getattr(module, "configuration", None)
-    if not isinstance(configuration, BatchConfiguration):
-        raise ValueError(f"{path} must define `configuration = BatchConfiguration(...)`")
+    if not isinstance(configuration, RunConfiguration):
+        raise ValueError(f"{path} must define `configuration = RunConfiguration(...)`")
     return configuration
 
 
-# Used by run_match.py and run_matches.py when no configuration file is given.
-DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "matches" / "barb_versus_barb.py"
+# Used by scripts/run.py when no configuration file is given.
+DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "runs" / "barb_versus_barb.py"
 # Fields that a command line option cannot replace: they stay in the configuration file.
-NOT_OVERRIDABLE_FIELDS = {"scenario", "teams", "flat_map_squares"}
+NOT_OVERRIDABLE_FIELDS = {"game", "engine", "graphics", "teams", "flat_map_squares"}
+# Where each overridable field lives, from the run down: its own fields, the scenario's, the engine's, the window's.
+OVERRIDABLE_CLASSES = {
+    "run": RunConfiguration,
+    "scenario": ScenarioConfiguration,
+    "engine": EngineConfiguration,
+    "graphics": GraphicsConfiguration,
+}
 
 
 def _overridable_fields() -> dict[str, tuple[str, object]]:
-    """Field name -> (owner, type) for every field with a command line option; owner is "batch" or "scenario".
+    """Field name -> (owner, type) for every field with a command line option (owner: a key of OVERRIDABLE_CLASSES).
 
-    The scenario's fields are offered next to the series' own (--map_name, --maximum_game_minutes...).
+    The fields of the scenario, of the engine and of the window are offered next to the run's own (--map_name,
+    --speed, --sound...).
     """
     overridable = {}
-    for owner, cls in (("batch", BatchConfiguration), ("scenario", ScenarioConfiguration)):
+    for owner, cls in OVERRIDABLE_CLASSES.items():
         hints = get_type_hints(cls)
-        for field in fields(cls):
-            if field.name not in NOT_OVERRIDABLE_FIELDS:
-                overridable[field.name] = (owner, hints[field.name])
+        for field_ in fields(cls):
+            if field_.name not in NOT_OVERRIDABLE_FIELDS:
+                overridable[field_.name] = (owner, hints[field_.name])
     return overridable
 
 
 def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
-    """The configuration file, optional, and one --<field> option per field to replace, of the series or of its
-    scenario.
+    """The configuration file, optional, and one --<field> option per field to replace: of the run, of its
+    scenario, of its engine and of its window. --graphical opens a window (default GraphicsConfiguration).
 
     Options take the exact field names (--map_name). Booleans also have a --no-<field> form; map_name takes
     one map or several.
@@ -162,15 +184,21 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         nargs="?",
         default=DEFAULT_CONFIGURATION_FILE,
-        help=f"Python configuration file, see configurations/matches/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
+        help=f"Python configuration file, see configurations/runs/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
     )
-    group = parser.add_argument_group("replace a field of the configuration file or of its scenario")
+    group = parser.add_argument_group("replace a field of the configuration file (run, scenario, engine, window)")
+    group.add_argument(
+        "--graphical",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="watch the games in a window (engine.graphics); --no-graphical runs without",
+    )
     for name, (_, annotation) in _overridable_fields().items():
         options: dict = {"dest": f"override_{name}", "default": None}
         if annotation is bool:
             options["action"] = argparse.BooleanOptionalAction
-        elif annotation in (int, float, str, float | None):
-            value_type = float if annotation == float | None else annotation
+        elif annotation in (int, float, str, float | None, str | None):
+            value_type = {float | None: float, str | None: str}.get(annotation, annotation)  # pyright: ignore
             options["type"] = value_type
             options["metavar"] = value_type.__name__  # pyright: ignore[reportAttributeAccessIssue]
         elif annotation == str | list[str]:
@@ -181,10 +209,10 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         group.add_argument(f"--{name}", **options)
 
 
-def configuration_from_arguments(arguments: argparse.Namespace) -> BatchConfiguration:
+def configuration_from_arguments(arguments: argparse.Namespace) -> RunConfiguration:
     """The configuration file of ``arguments``, with the fields given on the command line replaced."""
-    configuration = load_batch_configuration(arguments.configuration)
-    overrides: dict[str, dict] = {"batch": {}, "scenario": {}}
+    configuration = load_run_configuration(arguments.configuration)
+    overrides: dict[str, dict] = {owner: {} for owner in OVERRIDABLE_CLASSES}
     for name, (owner, _) in _overridable_fields().items():
         value = getattr(arguments, f"override_{name}")
         if value is None:
@@ -192,11 +220,18 @@ def configuration_from_arguments(arguments: argparse.Namespace) -> BatchConfigur
         # nargs="+" always gives a list; one map stays a plain name.
         overrides[owner][name] = value[0] if isinstance(value, list) and len(value) == 1 else value
     # replace() runs __post_init__ again, so replaced values are checked like the ones of the file.
-    scenario = replace(configuration.scenario, **overrides["scenario"])
-    return replace(configuration, scenario=scenario, **overrides["batch"])
+    engine = configuration.engine
+    graphics = engine.graphics
+    if arguments.graphical is not None:
+        graphics = (graphics or GraphicsConfiguration()) if arguments.graphical else None
+    if graphics is not None:
+        graphics = replace(graphics, **overrides["graphics"])
+    engine = replace(engine, graphics=graphics, **overrides["engine"])
+    game = replace(configuration.game, scenario=replace(configuration.game.scenario, **overrides["scenario"]))
+    return replace(configuration, game=game, engine=engine, **overrides["run"])
 
 
-def save_configuration(batch_directory: Path, configuration: BatchConfiguration, arguments: argparse.Namespace) -> None:
+def save_configuration(batch_directory: Path, configuration: RunConfiguration, arguments: argparse.Namespace) -> None:
     """configuration.py (copy of the file) and configuration.json (the values used, after the command line)."""
     shutil.copy(arguments.configuration, batch_directory / "configuration.py")
     content = {
@@ -212,6 +247,7 @@ def run_matches(
     batch_directory: Path,
     parallel: int,
     on_result: Callable[[int, MatchResult], None] | None = None,
+    graphics: GraphicsConfiguration | None = None,
 ) -> list[MatchResult]:
     """Run each configuration in its own engine process, at most ``parallel`` at a time.
 
@@ -226,6 +262,7 @@ def run_matches(
                 run_match,
                 configuration,
                 batch_directory / "matches" / f"match_{index:03d}_seed{configuration.seed}",
+                graphics,
             ): index
             for index, configuration in enumerate(configurations)
         }

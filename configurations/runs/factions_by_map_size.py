@@ -15,17 +15,20 @@ Run with: python scripts/run_matches.py configurations/matches/factions_by_map_s
 
 from dataclasses import replace
 
-from beyond_all_reason_environment import BatchConfiguration
+from beyond_all_reason_environment import BuiltInArtificialIntelligence, GameConfiguration, RunConfiguration
 from beyond_all_reason_environment.scenarios import armada_versus_cortex
 
-configuration = BatchConfiguration(
+configuration = RunConfiguration(
     name="factions_by_map_size",
-    # The armada_versus_cortex scenario, on three maps and with a longer time limit.
-    scenario=replace(
-        armada_versus_cortex,
-        map_name=["Red Comet Remake 1.8", "Comet Catcher Remake 1.8", "Archsimkats_Valley_V1"],
-        # Larger maps make longer matches; 60 minutes already stopped 8 matches out of 20 on the small map.
-        maximum_game_minutes=90,
+    game=GameConfiguration(
+        # The armada_versus_cortex scenario, on three maps and with a longer time limit.
+        scenario=replace(
+            armada_versus_cortex,
+            map_name=["Red Comet Remake 1.8", "Comet Catcher Remake 1.8", "Archsimkats_Valley_V1"],
+            # Larger maps make longer games; 60 minutes already stopped 8 games out of 20 on the small map.
+            maximum_game_minutes=90,
+        ),
+        controllers=[BuiltInArtificialIntelligence("BARb", version="stable")] * 2,
     ),
     matches=60,
     parallel=4,

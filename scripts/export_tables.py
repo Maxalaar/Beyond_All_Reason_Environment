@@ -11,8 +11,8 @@ Examples:
 import argparse
 from pathlib import Path
 
-from beyond_all_reason_environment.batch import VERSION_PREFIX, load_batch
 from beyond_all_reason_environment.match import RUNS_DIRECTORY
+from beyond_all_reason_environment.run import VERSION_PREFIX, load_batch
 from beyond_all_reason_environment.tables import write_tables
 
 

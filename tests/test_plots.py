@@ -4,9 +4,9 @@ import json
 from pathlib import Path
 
 from beyond_all_reason_environment import MatchConfiguration
-from beyond_all_reason_environment.batch import SUMMARISED_STATISTICS, load_batch, save_batch, summarise
 from beyond_all_reason_environment.match import MatchResult
 from beyond_all_reason_environment.plots import METRICS, plot_batch
+from beyond_all_reason_environment.run import SUMMARISED_STATISTICS, load_batch, save_batch, summarise
 
 
 def synthetic_history(minutes: int, growth: float) -> list[dict]:

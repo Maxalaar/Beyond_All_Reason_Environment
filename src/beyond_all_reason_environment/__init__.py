@@ -1,8 +1,11 @@
-"""Headless test harness and reinforcement learning environment for Beyond All Reason."""
+"""Headless test harness and reinforcement learning environment for Beyond All Reason.
+
+ScenarioConfiguration (the situation) -> GameConfiguration (+ who plays each team) -> RunConfiguration (games without
+Python, scripts/run.py) or ReinforcementLearningEnvironmentConfiguration (CombatEnvironment, for the agents).
+"""
 
 from pathlib import Path
 
-from .batch import BatchConfiguration
 from .controllers import (
     Agent,
     AttackNearest,
@@ -12,7 +15,16 @@ from .controllers import (
     HoldAndFire,
     Passive,
 )
+from .engine_configuration import EngineConfiguration, GraphicsConfiguration
+from .game import GameConfiguration
 from .match import MatchResult, run_match
+from .reinforcement_learning_environment_configuration import (
+    ActionConfiguration,
+    ObservationConfiguration,
+    ReinforcementLearningEnvironmentConfiguration,
+    RewardWeights,
+)
+from .run import RunConfiguration
 from .scenario import ScenarioConfiguration, TeamConfiguration
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
 
@@ -23,19 +35,26 @@ def results_browser_path() -> Path:
 
 
 __all__ = [
+    "ActionConfiguration",
     "Agent",
-    "TeamConfiguration",
     "ArtificialIntelligencePlayer",
     "AttackNearest",
     "BuiltInArtificialIntelligence",
     "Controller",
     "DoNothing",
+    "EngineConfiguration",
+    "GameConfiguration",
+    "GraphicsConfiguration",
     "HoldAndFire",
-    "Passive",
-    "BatchConfiguration",
     "MatchConfiguration",
     "MatchResult",
+    "ObservationConfiguration",
+    "Passive",
+    "ReinforcementLearningEnvironmentConfiguration",
+    "RewardWeights",
+    "RunConfiguration",
+    "ScenarioConfiguration",
+    "TeamConfiguration",
     "results_browser_path",
     "run_match",
-    "ScenarioConfiguration",
 ]

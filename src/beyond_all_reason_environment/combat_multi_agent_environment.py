@@ -1,8 +1,8 @@
 """RLlib MultiAgentEnv wrapper for CombatEnvironment.
 
 Thin adapter: no business logic, pure delegation. Configuration is passed via
-``env_config["configuration"]`` (a CombatConfiguration instance); falls back to
-defaults if absent.
+``env_config["configuration"]`` (a ReinforcementLearningEnvironmentConfiguration instance);
+falls back to defaults if absent.
 
 All agents share the same observation and action spaces (homogeneous, shared policy).
 ``__all__`` in terminations is True when a game-over condition is met (one side wiped
@@ -11,14 +11,18 @@ out); ``__all__`` in truncations is True when the episode ends by time limit onl
 
 from ray.rllib import MultiAgentEnv
 
-from beyond_all_reason_environment.combat_configuration import CombatConfiguration
 from beyond_all_reason_environment.combat_environment import CombatEnvironment
+from beyond_all_reason_environment.reinforcement_learning_environment_configuration import (
+    ReinforcementLearningEnvironmentConfiguration,
+)
 
 
 class CombatMultiAgentEnvironment(MultiAgentEnv):
     def __init__(self, env_config=None):
         super().__init__()
-        configuration: CombatConfiguration = (env_config or {}).get("configuration") or CombatConfiguration()
+        configuration: ReinforcementLearningEnvironmentConfiguration = (env_config or {}).get(
+            "configuration"
+        ) or ReinforcementLearningEnvironmentConfiguration()
         self._env = CombatEnvironment(configuration)
         self.possible_agents = list(self._env.possible_agents)
         per_agent_obs = self._env.observation_space(self._env.possible_agents[0])

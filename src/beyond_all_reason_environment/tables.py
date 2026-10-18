@@ -20,10 +20,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
-from .batch import VERSION_PREFIX
 from .installation import ENGINE_VERSION
 from .match import RUNS_DIRECTORY, MatchResult
 from .metrics import METRICS, minutes_of
+from .run import VERSION_PREFIX
 from .start_script import MatchConfiguration
 
 TABLES_FOLDER = "tables"

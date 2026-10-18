@@ -6,8 +6,8 @@ Use for IDE autocomplete in scenario configurations::
 
     scenario = ScenarioConfiguration(
         teams=[
-            TeamConfiguration(controller=Agent(), units={units.armada.bot.t1.pawn: 5}),
-            TeamConfiguration(controller=HoldAndFire(), side="Cortex", units={units.cortex.bot.t1.grunt: 5}),
+            TeamConfiguration(units={units.armada.bot.t1.pawn: 5}),
+            TeamConfiguration(side="Cortex", units={units.cortex.bot.t1.grunt: 5}),
         ],
     )
 """

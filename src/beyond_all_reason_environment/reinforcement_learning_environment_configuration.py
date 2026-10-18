@@ -1,24 +1,25 @@
-"""Configuration for combat environments: unit fights with no production or resource gathering.
+"""Configuration of the reinforcement learning environment (CombatEnvironment: unit fights, no production or
+resource gathering).
 
-A CombatConfiguration is made of separate parts, each answering one question:
+A ReinforcementLearningEnvironmentConfiguration is made of separate parts, each answering one question:
 
-    scenario     ScenarioConfiguration    what happens in the game: map, teams, alliances and who plays them,
-                                          placed units, start positions, episode length (scenario.py, shared with
-                                          the matches)
+    game         GameConfiguration        the game: a scenario (map, teams, alliances, placed units, start
+                                          positions, episode length) and who plays each team, Agent() for the
+                                          agents (game.py, shared with the runs of games)
     observation  ObservationConfiguration what each agent sees
     action       ActionConfiguration      what each agent can do, and how often it decides
     rewards      RewardWeights            how the agents are rewarded
     engine       EngineConfiguration      how the engine runs (window, speed), without effect on the results
 
-Scenarios (beyond_all_reason_environment.scenarios) only define the first part; an experiment (a training
-configuration) chooses the scenario and the other parts.
+Scenarios (beyond_all_reason_environment.scenarios) only define the situation; an experiment (a training
+configuration) chooses the scenario, the controllers and the other parts.
 """
 
 from dataclasses import dataclass, field, replace
 
-from .controllers import FIRE_AT_WILL, MANOEUVRE
+from .controllers import FIRE_AT_WILL, MANOEUVRE, Agent, HoldAndFire
 from .engine_configuration import EngineConfiguration
-from .scenario import ScenarioConfiguration
+from .game import GameConfiguration
 from .scenarios.five_versus_five import five_versus_five
 
 # Every command an agent may give, in the order of the action index. A unit type only gets the ones listed for it
@@ -30,7 +31,8 @@ COMMANDS = ("continue", "move", "fight", "attack", "stop")
 class ObservationConfiguration:
     """What each agent sees. Entity lists take the nearest entities, up to these counts (padded and masked).
 
-    A count left to None takes every unit the scenario can have in that list (resolved by CombatConfiguration).
+    A count left to None takes every unit the game can have in that list (resolved by
+    ReinforcementLearningEnvironmentConfiguration).
     """
 
     # Actor observation: units of the agent's alliance (other than its own), and of all enemy alliances combined.
@@ -53,11 +55,11 @@ class ObservationConfiguration:
         if self.terrain_resolution[0] < 1 or self.terrain_resolution[1] < 1:
             raise ValueError("terrain_resolution dimensions must be at least 1")
 
-    def resolved(self, scenario: ScenarioConfiguration) -> "ObservationConfiguration":
-        """A copy where every None count is replaced by the number of units the scenario can have there."""
-        counts = scenario.units_per_allyteam()
+    def resolved(self, game: GameConfiguration) -> "ObservationConfiguration":
+        """A copy where every None count is replaced by the number of units the game can have there."""
+        counts = game.scenario.units_per_allyteam()
         # The largest list any agent can see: over the alliances that have agents.
-        agent_allyteams = {scenario.allyteams[team] for team in scenario.agent_teams}
+        agent_allyteams = {game.scenario.allyteams[team] for team in game.agent_teams}
 
         def chosen(value: int | None, default: int) -> int:
             return default if value is None else value
@@ -111,30 +113,32 @@ class RewardWeights:
 
 
 @dataclass
-class CombatConfiguration:
-    """Everything a CombatEnvironment needs: a scenario, and how the agents see, act and are rewarded in it."""
+class ReinforcementLearningEnvironmentConfiguration:
+    """Everything a CombatEnvironment needs: a game, and how the agents see, act and are rewarded in it."""
 
-    scenario: ScenarioConfiguration = field(default_factory=lambda: five_versus_five)
+    game: GameConfiguration = field(
+        default_factory=lambda: GameConfiguration(five_versus_five, controllers=[Agent(), HoldAndFire()])
+    )
     observation: ObservationConfiguration = field(default_factory=ObservationConfiguration)
     action: ActionConfiguration = field(default_factory=ActionConfiguration)
     rewards: RewardWeights = field(default_factory=RewardWeights)
     engine: EngineConfiguration = field(default_factory=EngineConfiguration)
 
     def __post_init__(self) -> None:
-        scenario = self.scenario
-        if not scenario.agent_teams:
-            raise ValueError("the combat environment needs at least one team played by the agents (controllers.Agent)")
+        scenario = self.game.scenario
+        if not self.game.agent_teams:
+            raise ValueError("the environment needs at least one team played by the agents (controllers.Agent)")
         if not scenario.places_units:
-            raise ValueError("the combat environment needs placed units (team units), not a normal start")
+            raise ValueError("the environment needs placed units (team units), not a normal start")
         if not isinstance(scenario.map_name, str):
-            raise ValueError("the combat environment plays a single map, not a list")
+            raise ValueError("the environment plays a single map, not a list")
         if not scenario.full_vision:
             raise ValueError(
-                "the combat environment needs scenario.full_vision: the engine drops attack orders on units the "
-                "team does not see"
+                "the environment needs scenario.full_vision: the engine drops attack orders on units the team does "
+                "not see"
             )
         for team in scenario.teams:
             if not isinstance(team.side, str):
-                raise ValueError(f"the combat environment needs one faction per team, not {team.side!r}")
+                raise ValueError(f"the environment needs one faction per team, not {team.side!r}")
         # replace() makes a copy: an ObservationConfiguration shared by several configurations stays untouched.
-        self.observation = self.observation.resolved(self.scenario)
+        self.observation = self.observation.resolved(self.game)
