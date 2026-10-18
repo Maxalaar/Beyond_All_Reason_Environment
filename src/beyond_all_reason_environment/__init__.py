@@ -3,6 +3,15 @@
 from pathlib import Path
 
 from .batch import BatchConfiguration
+from .controllers import (
+    Agent,
+    AttackNearest,
+    BuiltInArtificialIntelligence,
+    Controller,
+    DoNothing,
+    HoldAndFire,
+    Passive,
+)
 from .match import MatchResult, run_match
 from .scenario import AllyteamConfiguration, ScenarioConfiguration
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
@@ -14,8 +23,15 @@ def results_browser_path() -> Path:
 
 
 __all__ = [
+    "Agent",
     "AllyteamConfiguration",
     "ArtificialIntelligencePlayer",
+    "AttackNearest",
+    "BuiltInArtificialIntelligence",
+    "Controller",
+    "DoNothing",
+    "HoldAndFire",
+    "Passive",
     "BatchConfiguration",
     "MatchConfiguration",
     "MatchResult",

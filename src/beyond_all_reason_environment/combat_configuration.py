@@ -15,8 +15,9 @@ configuration) chooses the scenario and the other parts.
 
 from dataclasses import dataclass, field, replace
 
+from .controllers import FIRE_AT_WILL, MANOEUVRE, Agent
 from .engine_configuration import EngineConfiguration
-from .scenario import FIRE_AT_WILL, MANOEUVRE, ScenarioConfiguration, is_agent
+from .scenario import ScenarioConfiguration
 from .scenarios.five_versus_five import five_versus_five
 
 # Every command an agent may give, in the order of the action index. A unit type only gets the ones listed for it
@@ -116,8 +117,9 @@ class CombatConfiguration:
 
     def __post_init__(self) -> None:
         scenario = self.scenario
-        if not is_agent(scenario.allyteams[0].player) or any(is_agent(p) for p in scenario.players[1:]):
-            raise ValueError("the agents (scenario.AGENT) play allyteam 0, and only it")
+        controllers = [allyteam.controller for allyteam in scenario.allyteams]
+        if not isinstance(controllers[0], Agent) or any(isinstance(c, Agent) for c in controllers[1:]):
+            raise ValueError("the agents (controllers.Agent) play allyteam 0, and only it")
         if not scenario.places_units:
             raise ValueError("the combat environment needs placed units (allyteam units), not a normal start")
         if not isinstance(scenario.map_name, str):
@@ -127,8 +129,8 @@ class CombatConfiguration:
                 "the combat environment needs scenario.full_vision: the engine drops attack orders on units the "
                 "team does not see"
             )
-        for player in scenario.players:
-            if not isinstance(player.side, str):
-                raise ValueError(f"the combat environment needs one faction per player, not {player.side!r}")
+        for allyteam in scenario.allyteams:
+            if not isinstance(allyteam.side, str):
+                raise ValueError(f"the combat environment needs one faction per allyteam, not {allyteam.side!r}")
         # replace() makes a copy: an ObservationConfiguration shared by several configurations stays untouched.
         self.observation = self.observation.resolved(self.scenario)

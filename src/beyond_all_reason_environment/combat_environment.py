@@ -109,7 +109,7 @@ from .environment import CONNECTION_TIMEOUT_SECONDS, Environment
 from .game_extension import extension_game_name
 from .installation import build_bridge_ai
 from .match import RUNS_DIRECTORY, start_engine
-from .scenario import spawn_positions, unit_states
+from .scenario import controller_mod_options, spawn_positions, unit_states
 from .start_script import FRAMES_PER_SECOND, MatchConfiguration
 
 COMMAND_STATES = ("none", "move", "fight", "attack", "stop", "other")
@@ -674,7 +674,7 @@ class CombatEnvironment(Environment):
         port = self._server.getsockname()[1]
         players = [
             replace(
-                configuration.scenario.allyteams[0].player,
+                configuration.scenario.allyteams[0].player(),
                 options={
                     "port": str(port),
                     "decision_interval": str(configuration.action.decision_interval_frames),
@@ -695,6 +695,7 @@ class CombatEnvironment(Environment):
             extra_mod_options={
                 "deathmode": "neverend",
                 "reinforcement_learning_full_vision": "1" if configuration.scenario.full_vision else "0",
+                **controller_mod_options(configuration.scenario),
             },
         )
         self._process = start_engine(match_configuration, self.run_directory, graphical=configuration.engine.graphical)

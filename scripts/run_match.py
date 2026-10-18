@@ -48,7 +48,7 @@ def main() -> None:
         return
     if result.outcome == "victory" and result.winner is not None:
         player = configuration.players[result.winner]
-        print(f"Winner: player {result.winner} ({player.short_name}, {player.side})")
+        print(f"Winner: player {result.winner} ({player.display_name}, {player.side})")
     else:
         print(f"No winner ({result.outcome}).")
     print(

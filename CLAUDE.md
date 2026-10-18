@@ -72,8 +72,13 @@ so the environment must match its interface (to confirm).
   CombatConfiguration = scenario + observation + action + rewards + engine; BatchConfiguration = scenario + series
   parameters (matches, parallel, seeds, replays). Scenarios (scenarios/<name>.py, variable named like the file)
   define only the scenario; the experiment (training configuration in Maxalaar_Reinforcement_Learning,
-  configurations/beyond_all_reason/) chooses observation, action and rewards. scenario.AGENT (BridgeAI) marks the
-  agents; with_agents_played_by(BARb) runs an agent scenario as matches. Observation counts left to None follow
+  configurations/beyond_all_reason/) chooses observation, action and rewards. Each allyteam has a controller
+  (controllers.py, agreed 2026-10-18: DoNothing, Passive, HoldAndFire, AttackNearest, BuiltInArtificialIntelligence,
+  Agent) and a side; a controller gives the engine AI (NullAI for scripted ones), the placed units' states and an
+  optional gadget script (mod option reinforcement_learning_controllers, "team,script,params/..."; SCRIPTS table in
+  the gadget). with_controller(0, AttackNearest()) runs an agent scenario as matches. Planned later: a PythonPolicy
+  controller (a Python policy or a trained checkpoint through a BridgeAI, for the evaluation league).
+  ArtificialIntelligencePlayer.label/display_name names players in charts and tables. Observation counts left to None follow
   the scenario. Armor types are the constant NUMBER_OF_ARMOR_TYPES (checked against the engine at start).
   Match series live in configurations/matches/.
 - Placed units in a match (no Python): the gadget reads mod option reinforcement_learning_scenario
@@ -81,7 +86,7 @@ so the environment must match its interface (to confirm).
   the commanders (spawn first, so game_end never sees an empty team); deathmode=killall. editor_sandbox=1 would skip
   commanders but also disables game_end, so it is not used. Matches with placed units or full vision use the game
   extension as GameType (start_engine writes it; replay.py too).
-- BARb with only placed units (one_versus_one_barb, 2026-10-18): it mostly leaves its Pawn idle (no damage in 6
+- BARb with only placed units (one_versus_one with BARb, 2026-10-18): it mostly leaves its Pawn idle (no damage in 6
   minutes, once 54 damage just before 2 minutes, same seed): not a useful baseline for unit-only scenarios.
 - The game extension (archive "Beyond All Reason Reinforcement Learning 1", depends on the pinned BAR) is written
   into <run>/games/ and is the GameType; its widget keeps LuaSocket (BAR only sandboxes user widgets).

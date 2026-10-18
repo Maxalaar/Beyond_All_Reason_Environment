@@ -58,7 +58,8 @@ class BatchConfiguration:
             raise ValueError("matches and parallel must be at least 1")
         if self.scenario.has_agents:
             raise ValueError(
-                "nobody plays the agents in a match without Python: use scenario.with_agents_played_by(<player>)"
+                "nobody plays the agents in a match without Python: give their allyteam another controller, "
+                "scenario.with_controller(0, AttackNearest()) for example"
             )
 
     def match_configurations(self) -> list[MatchConfiguration]:
@@ -73,11 +74,11 @@ class BatchConfiguration:
         seed = self.first_seed + index
         scenario = self.scenario
         maps = scenario.map_name
-        # Placed units and full vision come from the gadget of the game extension.
-        uses_game_extension = scenario.places_units or scenario.full_vision
+        uses_game_extension = scenario.uses_game_extension
         return MatchConfiguration(
             players=[
-                replace(player, side=_draw_side(player, seed, number)) for number, player in enumerate(scenario.players)
+                allyteam.player(_draw_side(allyteam.side, seed, number))
+                for number, allyteam in enumerate(scenario.allyteams)
             ],
             map_name=maps if isinstance(maps, str) else maps[index % len(maps)],
             flat_map_squares=scenario.flat_map_squares,
@@ -90,11 +91,11 @@ class BatchConfiguration:
         )
 
 
-def _draw_side(player: ArtificialIntelligencePlayer, seed: int, number: int) -> Side:
-    """The player's faction in the match with this seed; the same seed always draws the same faction."""
-    if isinstance(player.side, str):
-        return player.side
-    return random.Random(f"{seed}:{number}").choice(player.side)
+def _draw_side(side: Side | list[Side], seed: int, number: int) -> Side:
+    """The faction of allyteam ``number`` in the match with this seed; the same seed always draws the same one."""
+    if isinstance(side, str):
+        return side
+    return random.Random(f"{seed}:{number}").choice(side)
 
 
 VERSION_PREFIX = "version_"
@@ -258,7 +259,7 @@ def summarise(configurations: list[MatchConfiguration], results: list[MatchResul
         played = [result.team_statistics[player] for result in finished if result.team_statistics]
         players.append(
             {
-                "name": configurations[0].players[player].short_name,
+                "name": configurations[0].players[player].display_name,
                 "sides": sorted({str(configuration.players[player].side) for configuration in configurations}),
                 "wins": sum(result.winner == player for result in results),
                 # {side: {"wins": ..., "matches": ...}}, for players that play several factions

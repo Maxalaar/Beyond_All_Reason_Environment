@@ -1,8 +1,8 @@
 """Predefined scenarios (scenario.ScenarioConfiguration): what happens in the game, whatever runs it.
 
-A scenario with agents (scenario.AGENT) runs in the combat environment, CombatConfiguration(scenario=...), or in
-matches once a built-in artificial intelligence plays the agents (ScenarioConfiguration.with_agents_played_by);
-a scenario without agents runs in matches, BatchConfiguration(scenario=...). A scenario says nothing of how the
+A scenario with agents (controllers.Agent) runs in the combat environment, CombatConfiguration(scenario=...), or in
+matches once another controller plays the agents' allyteam (ScenarioConfiguration.with_controller); a scenario
+without agents runs in matches, BatchConfiguration(scenario=...). A scenario says nothing of how the
 agents see, act or are rewarded: an experiment chooses those. Each file defines a scenario named like the file.
 """
 

@@ -73,7 +73,7 @@ def build_tables(
             identity = {
                 **keys,
                 "player": number,
-                "artificial_intelligence": player.short_name,
+                "artificial_intelligence": player.display_name,
                 "artificial_intelligence_version": player.version,
                 "side": str(player.side),
             }

@@ -126,7 +126,7 @@ def _direct_label(axes: Axes, x: np.ndarray, y: np.ndarray, text: str, color: st
 
 def _player_label(configuration: MatchConfiguration, index: int, with_side: bool = True) -> str:
     player = configuration.players[index]
-    return f"player {index}: {player.short_name}" + (f" ({player.side})" if with_side else "")
+    return f"player {index}: {player.display_name}" + (f" ({player.side})" if with_side else "")
 
 
 def _finish_time_axes(axes: Axes, metric: Metric, x_label: str = "game minutes") -> None:
@@ -225,7 +225,7 @@ def plot_match(result: MatchResult, configuration: MatchConfiguration, match_dir
 def _batch_player_label(configurations: Sequence[MatchConfiguration], index: int) -> str:
     """'player 0: BARb (Armada)', or '(Armada/Legion)' for a player whose faction was drawn from a list."""
     sides = sorted({str(configuration.players[index].side) for configuration in configurations})
-    return f"player {index}: {configurations[0].players[index].short_name} ({'/'.join(sides)})"
+    return f"player {index}: {configurations[0].players[index].display_name} ({'/'.join(sides)})"
 
 
 @dataclass

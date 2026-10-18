@@ -1,50 +1,35 @@
-"""A scenario: what happens in a game (map, teams, who plays them, how they start), whatever runs it.
+"""A scenario: what happens in a game (map, allyteams, who plays them, how they start), whatever runs it.
 
 The same ScenarioConfiguration serves a series of matches (batch.py, run_match.py, run_matches.py) and the combat
-environment (combat_configuration.py). Each allyteam is played by one artificial intelligence: BARb, NullAI, or
-the agents of the environment (AGENT, the BridgeAI talking to Python). An allyteam either starts normally (a
-commander and its economy) or, when ``units`` is given, with exactly these units placed on the map; the game
-extension's gadget places them at the start of the match, or at each reset of the environment.
+environment (combat_configuration.py). Each allyteam has a controller (controllers.py: DoNothing, Passive,
+HoldAndFire, AttackNearest, BuiltInArtificialIntelligence such as BARb, or Agent, played from Python) and a faction.
+An allyteam either starts normally (a commander and its economy) or, when ``units`` is given, with exactly these
+units placed on the map; the game extension's gadget places them at the start of the match, or at each reset of the
+environment.
 """
 
-from dataclasses import dataclass, field, replace
-from typing import Literal
+from dataclasses import dataclass, replace
 
 import numpy as np
 
+from .controllers import DEFAULT_STATE, Agent, Controller
 from .installation import DEFAULT_MAP
-from .start_script import FRAMES_PER_SECOND, ArtificialIntelligencePlayer
-
-# The agents of the combat environment: BridgeAI forwards observations and actions to Python.
-AGENT = ArtificialIntelligencePlayer(short_name="BridgeAI", version="0.1", side="Armada")
-# Does nothing by itself: placed units keep the fire and move states of their allyteam's behaviour.
-NULL_ARTIFICIAL_INTELLIGENCE = ArtificialIntelligencePlayer(short_name="NullAI", version="0.1", side="Armada")
-
-# Fire states: 0 hold fire, 1 return fire, 2 fire at will. Move states: 0 hold position, 1 manoeuvre, 2 roam.
-FIRE_AT_WILL, HOLD_FIRE = 2, 0
-HOLD_POSITION, MANOEUVRE = 0, 1
-# Keeps the unit's own state (the game's default, or what its artificial intelligence sets).
-DEFAULT_STATE = -1
-BEHAVIOURS = {
-    "passive": (HOLD_FIRE, HOLD_POSITION),  # does not move, does not shoot
-    "hold_and_fire": (FIRE_AT_WILL, HOLD_POSITION),  # does not move, shoots what comes in range
-}
-
-
-def is_agent(player: ArtificialIntelligencePlayer) -> bool:
-    return player.short_name == AGENT.short_name
+from .start_script import FRAMES_PER_SECOND, ArtificialIntelligencePlayer, Side
 
 
 @dataclass
 class AllyteamConfiguration:
-    """One allyteam: who plays it and how it starts."""
+    """One allyteam: who plays it, its faction and how it starts."""
 
-    player: ArtificialIntelligencePlayer = field(default_factory=ArtificialIntelligencePlayer)
+    controller: Controller
+    # One faction, or a list: each match of a series then draws one (reproducibly, from the match seed).
+    side: Side | list[Side] = "Armada"
     # Unit name -> number: the allyteam starts with exactly these units. None: a normal start (commander).
     units: dict[str, int] | None = None
-    # Fire and move states given to the placed units, for an artificial intelligence that does not set them
-    # (NullAI). None keeps the units' defaults; the agents' states come from ActionConfiguration.
-    behaviour: Literal["passive", "hold_and_fire"] | None = None
+
+    def player(self, side: Side | None = None) -> ArtificialIntelligencePlayer:
+        """The artificial intelligence the engine runs for this allyteam, with ``side`` (default: its own)."""
+        return self.controller.player(self.side if side is None else side)
 
 
 @dataclass
@@ -82,11 +67,6 @@ class ScenarioConfiguration:
             raise ValueError("map_name must be a map or a non-empty list of maps")
         if len({allyteam.units is None for allyteam in self.allyteams}) > 1:
             raise ValueError("either every allyteam has placed units, or none (a normal start)")
-        for index, allyteam in enumerate(self.allyteams):
-            if allyteam.behaviour is not None and allyteam.behaviour not in BEHAVIOURS:
-                raise ValueError(
-                    f"allyteams[{index}].behaviour must be one of {sorted(BEHAVIOURS)}, got {allyteam.behaviour!r}"
-                )
 
     @property
     def places_units(self) -> bool:
@@ -95,11 +75,16 @@ class ScenarioConfiguration:
 
     @property
     def players(self) -> list[ArtificialIntelligencePlayer]:
-        return [allyteam.player for allyteam in self.allyteams]
+        return [allyteam.player() for allyteam in self.allyteams]
 
     @property
     def has_agents(self) -> bool:
-        return any(is_agent(player) for player in self.players)
+        return any(isinstance(allyteam.controller, Agent) for allyteam in self.allyteams)
+
+    @property
+    def uses_game_extension(self) -> bool:
+        """Placed units, full vision and scripted controllers come from the gadget of the game extension."""
+        return self.places_units or self.full_vision or any(a.controller.gadget_script() for a in self.allyteams)
 
     @property
     def unit_types(self) -> list[str]:
@@ -110,30 +95,20 @@ class ScenarioConfiguration:
     def maximum_game_frames(self) -> int:
         return int(self.maximum_game_minutes * 60 * FRAMES_PER_SECOND)
 
-    def with_agents_played_by(self, player: ArtificialIntelligencePlayer) -> "ScenarioConfiguration":
-        """A copy where ``player`` (BARb for example) plays the agents' allyteams: to watch or measure the scenario
-        with a built-in artificial intelligence, without Python."""
-        return replace(
-            self,
-            allyteams=[
-                replace(allyteam, player=replace(player, side=allyteam.player.side))
-                if is_agent(allyteam.player)
-                else allyteam
-                for allyteam in self.allyteams
-            ],
-        )
+    def with_controller(self, index: int, controller: Controller) -> "ScenarioConfiguration":
+        """A copy where ``controller`` plays allyteam ``index``: for example the agents' allyteam played by
+        AttackNearest() or BARb, to watch or measure the scenario without Python."""
+        allyteams = list(self.allyteams)
+        allyteams[index] = replace(allyteams[index], controller=controller)
+        return replace(self, allyteams=allyteams)
 
 
 def unit_states(scenario: ScenarioConfiguration, agent_states: tuple[int, int]) -> list[int]:
     """Fire and move state of each allyteam's placed units, two values per allyteam (-1: unit default)."""
     states = []
     for allyteam in scenario.allyteams:
-        if is_agent(allyteam.player):
-            states.extend(agent_states)
-        elif allyteam.behaviour is not None:
-            states.extend(BEHAVIOURS[allyteam.behaviour])
-        else:
-            states.extend([DEFAULT_STATE, DEFAULT_STATE])
+        is_agent = isinstance(allyteam.controller, Agent)
+        states.extend(agent_states if is_agent else allyteam.controller.unit_states())
     return states
 
 
@@ -185,17 +160,30 @@ def spawn_positions(scenario: ScenarioConfiguration, random: np.random.Generator
     return spawns
 
 
-def scenario_mod_options(scenario: ScenarioConfiguration, seed: int) -> dict[str, str]:
-    """Mod options that make the game extension's gadget place the scenario's units at the start of a match.
+def controller_mod_options(scenario: ScenarioConfiguration) -> dict[str, str]:
+    """The mod option that makes the gadget run the scripted controllers: "<allyteam>,<script>,<parameter>.../..."."""
+    scripts = [
+        f"{index},{script}"
+        for index, allyteam in enumerate(scenario.allyteams)
+        if (script := allyteam.controller.gadget_script()) is not None
+    ]
+    return {"reinforcement_learning_controllers": "/".join(scripts)} if scripts else {}
 
-    Spawn positions are drawn from ``seed``, so a match is reproducible. The game ends when every unit of a side is
-    destroyed (deathmode killall); a normal start keeps the game's own end condition.
+
+def scenario_mod_options(scenario: ScenarioConfiguration, seed: int) -> dict[str, str]:
+    """Mod options that make the game extension's gadget set the scenario up in a match without Python.
+
+    Placed units: spawn positions are drawn from ``seed``, so a match is reproducible, and the game ends when every
+    unit of a side is destroyed (deathmode killall); a normal start keeps the game's own end condition. Scripted
+    controllers and full vision apply in both cases.
     """
-    options = {"reinforcement_learning_full_vision": "1" if scenario.full_vision else "0"}
+    options = {
+        "reinforcement_learning_full_vision": "1" if scenario.full_vision else "0",
+        **controller_mod_options(scenario),
+    }
     if not scenario.places_units:
         return options
     spawns = spawn_positions(scenario, np.random.default_rng(seed))
-    # Without Python nobody chooses the agents' states: the units keep their defaults.
     states = unit_states(scenario, (DEFAULT_STATE, DEFAULT_STATE))
     spawns_text = "/".join(f"{spawn['team']},{spawn['unit']},{spawn['x']:.6f},{spawn['z']:.6f}" for spawn in spawns)
     options["reinforcement_learning_scenario"] = f"{spawns_text}|{','.join(map(str, states))}"

@@ -16,6 +16,10 @@
 -- before (commanders at the start of a match) and the wrecks of the previous episode: a team is never left without
 -- units, so the game's end condition (deathmode killall in matches) only fires when a side is really eliminated.
 -- The states array has 2*N values for N allyteams: fire and move per team index, -1 keeps the unit's default.
+--
+-- Scripted controllers (controllers.py) run here too, in matches and in the environment alike: the mod option
+-- reinforcement_learning_controllers lists "<team>,<script>,<parameter>,.../...", and SCRIPTS below runs each
+-- script for its team at every game frame.
 
 if not gadgetHandler:IsSyncedCode() then
 	return
@@ -111,12 +115,63 @@ local function reset(message)
 	return table.concat(unitIDs, ",")
 end
 
+-- AttackNearest: every intervalFrames, each unit attacks the nearest enemy it sees, or moves towards the nearest
+-- enemy while fighting (attack-move) when it sees none.
+local function attackNearest(teamID, frame, intervalFrames)
+	if frame % intervalFrames ~= 0 then
+		return
+	end
+	for _, unitID in ipairs(Spring.GetTeamUnits(teamID)) do
+		if not Spring.GetUnitIsDead(unitID) then
+			local enemyID = Spring.GetUnitNearestEnemy(unitID, 1.0e9, true)
+			if enemyID then
+				local commandID, _, _, targetID = Spring.GetUnitCurrentCommand(unitID)
+				if commandID ~= CMD.ATTACK or targetID ~= enemyID then
+					Spring.GiveOrderToUnit(unitID, CMD.ATTACK, { enemyID }, 0)
+				end
+			else
+				enemyID = Spring.GetUnitNearestEnemy(unitID, 1.0e9, false)
+				if enemyID then
+					local x, y, z = Spring.GetUnitPosition(enemyID)
+					Spring.GiveOrderToUnit(unitID, CMD.FIGHT, { x, y, z }, 0)
+				end
+			end
+		end
+	end
+end
+
+-- Script name (controllers.Controller.gadget_script) -> function(teamID, frame, parameters...).
+local SCRIPTS = {
+	attack_nearest = attackNearest,
+}
+
+-- { teamID, function, parameters } for every scripted controller of the match.
+local scriptedTeams = {}
+for _, entry in ipairs(split(modOptions.reinforcement_learning_controllers or "", "/")) do
+	local values = split(entry, ",")
+	local script = SCRIPTS[values[2]]
+	if script then
+		local parameters = {}
+		for index = 3, #values do
+			parameters[#parameters + 1] = tonumber(values[index])
+		end
+		scriptedTeams[#scriptedTeams + 1] = { teamID = tonumber(values[1]), script = script, parameters = parameters }
+	else
+		Spring.Echo("[RL Scenario] unknown controller script " .. tostring(values[2]))
+	end
+end
+
 function gadget:GameFrame(frame)
 	local scenario = modOptions.reinforcement_learning_scenario
 	if frame == SETUP_FRAME and scenario and scenario ~= "" then
 		local fields = split(scenario, "|")
 		placeScenario(fields[1], "/", fields[2])
 		currentEpisode = 0
+	end
+	if frame > SETUP_FRAME then
+		for _, scripted in ipairs(scriptedTeams) do
+			scripted.script(scripted.teamID, frame, unpack(scripted.parameters))
+		end
 	end
 end
 

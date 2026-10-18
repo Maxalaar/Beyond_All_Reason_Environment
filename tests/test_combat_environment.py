@@ -23,14 +23,15 @@ from beyond_all_reason_environment.combat_environment import (
     team_reward,
     weapon_feature_names,
 )
+from beyond_all_reason_environment.controllers import Agent, AttackNearest, BuiltInArtificialIntelligence, DoNothing
 from beyond_all_reason_environment.game_extension import extension_game_name, write_game_extension
 from beyond_all_reason_environment.installation import GAME_VERSION
 from beyond_all_reason_environment.scenario import (
-    AGENT,
-    NULL_ARTIFICIAL_INTELLIGENCE,
     AllyteamConfiguration,
     ScenarioConfiguration,
+    controller_mod_options,
     spawn_positions,
+    unit_states,
 )
 from beyond_all_reason_environment.scenarios import five_versus_five, one_versus_one
 
@@ -175,8 +176,8 @@ def test_team_reward_counts_damage_kills_and_victory():
 def test_spawns_put_agents_first_facing_the_opponent():
     scenario = ScenarioConfiguration(
         allyteams=[
-            AllyteamConfiguration(player=AGENT, units={"armpw": 3}),
-            AllyteamConfiguration(player=NULL_ARTIFICIAL_INTELLIGENCE, units={"corak": 2}),
+            AllyteamConfiguration(controller=Agent(), units={"armpw": 3}),
+            AllyteamConfiguration(controller=DoNothing(), units={"corak": 2}),
         ]
     )
     spawns = spawn_positions(scenario, np.random.default_rng(0))
@@ -189,6 +190,27 @@ def test_spawns_put_agents_first_facing_the_opponent():
 def test_configuration_rejects_unknown_commands():
     with pytest.raises(ValueError):
         ActionConfiguration(commands={"default": ["dance"]})
+
+
+def test_controllers_give_states_scripts_and_players():
+    scenario = one_versus_one.with_controller(1, AttackNearest(interval_seconds=0.5))
+    # Agent states come from ActionConfiguration; AttackNearest fires at will and manoeuvres.
+    assert unit_states(scenario, (2, 1)) == [2, 1, 2, 1]
+    assert controller_mod_options(scenario) == {"reinforcement_learning_controllers": "1,attack_nearest,15"}
+    assert controller_mod_options(one_versus_one) == {}
+    players = [allyteam.player() for allyteam in scenario.allyteams]
+    assert [(player.short_name, player.display_name) for player in players] == [
+        ("BridgeAI", "Agent"),
+        ("NullAI", "AttackNearest"),
+    ]
+    assert BuiltInArtificialIntelligence("BARb").player("Cortex").display_name == "BARb"
+
+
+def test_the_agents_must_play_allyteam_zero_only():
+    with pytest.raises(ValueError, match="allyteam 0"):
+        CombatConfiguration(scenario=one_versus_one.with_controller(0, AttackNearest()))
+    with pytest.raises(ValueError, match="allyteam 0"):
+        CombatConfiguration(scenario=one_versus_one.with_controller(1, Agent()))
 
 
 def test_observation_counts_left_unset_follow_the_scenario():

@@ -6,23 +6,24 @@ Policies:
 
 Examples:
     python scripts/try_combat_environment.py --policy attack --episodes 5
-    python scripts/try_combat_environment.py --policy random --opponent hold_and_fire
+    python scripts/try_combat_environment.py --policy random --opponent HoldAndFire
+    python scripts/try_combat_environment.py --scenario one_versus_one --opponent AttackNearest
     python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
     python scripts/try_combat_environment.py --scenario one_versus_one --graphical --speed 2
 """
 
 import argparse
 import time
-from dataclasses import replace
 
 import numpy as np
 
-from beyond_all_reason_environment import scenarios
+from beyond_all_reason_environment import AttackNearest, DoNothing, HoldAndFire, Passive, scenarios
 from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
 from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
 from beyond_all_reason_environment.engine_configuration import EngineConfiguration
 
 ATTACK = COMMANDS.index("attack")
+OPPONENTS = {controller.label: controller for controller in (DoNothing(), Passive(), HoldAndFire(), AttackNearest())}
 
 
 def random_action(observation: dict, random: np.random.Generator) -> dict:
@@ -46,9 +47,7 @@ def main() -> None:
     parser.add_argument("--policy", choices=["random", "attack"], default="attack")
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--scenario", choices=["five_versus_five", "one_versus_one"], default="five_versus_five")
-    parser.add_argument(
-        "--opponent", choices=["passive", "hold_and_fire"], default="passive", help="behaviour of the opponents"
-    )
+    parser.add_argument("--opponent", choices=sorted(OPPONENTS), default="Passive", help="controller of the opponents")
     parser.add_argument("--graphical", action="store_true")
     parser.add_argument("--speed", type=float, default=None, help="with --graphical, multiple of real time")
     parser.add_argument("--seed", type=int, default=0)
@@ -56,13 +55,8 @@ def main() -> None:
     arguments = parser.parse_args()
 
     scenario = getattr(scenarios, arguments.scenario)
-    scenario = replace(
-        scenario,
-        allyteams=[
-            scenario.allyteams[0],
-            *(replace(allyteam, behaviour=arguments.opponent) for allyteam in scenario.allyteams[1:]),
-        ],
-    )
+    for index in range(1, len(scenario.allyteams)):
+        scenario = scenario.with_controller(index, OPPONENTS[arguments.opponent])
     configuration = CombatConfiguration(
         scenario=scenario,
         engine=EngineConfiguration(

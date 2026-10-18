@@ -27,6 +27,13 @@ class ArtificialIntelligencePlayer:
     version: str = "stable"
     side: Side | list[Side] = "Armada"
     options: dict[str, str] = field(default_factory=dict)
+    # Name in charts and tables, when short_name alone does not say what plays (NullAI playing a scripted
+    # controller of controllers.py, for example). None: short_name.
+    label: str | None = None
+
+    @property
+    def display_name(self) -> str:
+        return self.label or self.short_name
 
     def __post_init__(self) -> None:
         sides = [self.side] if isinstance(self.side, str) else self.side

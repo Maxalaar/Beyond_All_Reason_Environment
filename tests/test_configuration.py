@@ -9,7 +9,9 @@ import pytest
 from beyond_all_reason_environment import (
     AllyteamConfiguration,
     ArtificialIntelligencePlayer,
+    AttackNearest,
     BatchConfiguration,
+    BuiltInArtificialIntelligence,
     MatchConfiguration,
     ScenarioConfiguration,
 )
@@ -27,12 +29,14 @@ from beyond_all_reason_environment.scenarios import one_versus_one
 from beyond_all_reason_environment.start_script import build_start_script
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-TWO_PLAYERS = [ArtificialIntelligencePlayer(side="Armada"), ArtificialIntelligencePlayer(side="Cortex")]
+TWO_SIDES = ["Armada", "Cortex"]
 
 
-def scenario(players: list[ArtificialIntelligencePlayer] = TWO_PLAYERS, **fields) -> ScenarioConfiguration:
-    """A normal start (commanders) for each player."""
-    return ScenarioConfiguration(allyteams=[AllyteamConfiguration(player=player) for player in players], **fields)
+def scenario(sides: list = TWO_SIDES, **fields) -> ScenarioConfiguration:
+    """BARb with a normal start (commander) for each side."""
+    return ScenarioConfiguration(
+        allyteams=[AllyteamConfiguration(BuiltInArtificialIntelligence("BARb"), side=side) for side in sides], **fields
+    )
 
 
 def test_start_script_lifts_speed_limit_and_stops_at_time_limit():
@@ -51,8 +55,7 @@ def test_each_player_keeps_its_side_and_seeds_follow():
 
 
 def test_list_of_sides_is_drawn_reproducibly_per_match():
-    players = [ArtificialIntelligencePlayer(side=["Armada", "Cortex", "Legion"]), ArtificialIntelligencePlayer()]
-    batch = BatchConfiguration(name="test", scenario=scenario(players), matches=30)
+    batch = BatchConfiguration(name="test", scenario=scenario([["Armada", "Cortex", "Legion"], "Armada"]), matches=30)
     drawn = [match.players[0].side for match in batch.match_configurations()]
     assert drawn == [match.players[0].side for match in batch.match_configurations()]
     assert set(drawn) == {"Armada", "Cortex", "Legion"}
@@ -73,7 +76,7 @@ def test_unknown_side_is_rejected():
     "build",
     [
         lambda: BatchConfiguration(name="has space", scenario=scenario()),
-        lambda: BatchConfiguration(name="test", scenario=scenario(TWO_PLAYERS[:1])),
+        lambda: BatchConfiguration(name="test", scenario=scenario(TWO_SIDES[:1])),
         lambda: BatchConfiguration(name="test", scenario=scenario(), parallel=0),
         # Nobody would play the agent without Python.
         lambda: BatchConfiguration(name="test", scenario=one_versus_one),
@@ -87,20 +90,23 @@ def test_invalid_batch_configuration_is_rejected(build):
 def test_placed_units_and_commanders_do_not_mix():
     with pytest.raises(ValueError, match="placed units"):
         ScenarioConfiguration(
-            allyteams=[AllyteamConfiguration(units={"armpw": 1}), AllyteamConfiguration()],
+            allyteams=[
+                AllyteamConfiguration(AttackNearest(), units={"armpw": 1}),
+                AllyteamConfiguration(AttackNearest()),
+            ],
         )
 
 
 def test_a_scenario_with_placed_units_is_set_up_by_the_game_extension():
-    barb = ArtificialIntelligencePlayer(short_name="BARb", version="stable")
-    batch = BatchConfiguration(name="test", scenario=one_versus_one.with_agents_played_by(barb))
+    batch = BatchConfiguration(name="test", scenario=one_versus_one.with_controller(0, AttackNearest()))
     match = batch.match_configuration(0)
-    assert [player.short_name for player in match.players] == ["BARb", "NullAI"]
+    assert [player.display_name for player in match.players] == ["AttackNearest", "Passive"]
     assert match.game_version == extension_game_name()
     assert match.extra_mod_options["deathmode"] == "killall"
+    assert match.extra_mod_options["reinforcement_learning_controllers"] == "0,attack_nearest,30"
     spawns, states = match.extra_mod_options["reinforcement_learning_scenario"].split("|")
-    # BARb sets its own states (-1: default); the passive NullAI Pawn holds fire and position.
-    assert spawns.count("/") == 1 and states == "-1,-1,0,0"
+    # AttackNearest fires at will and manoeuvres; the Passive Pawn holds fire and position.
+    assert spawns.count("/") == 1 and states == "2,1,0,0"
     assert ";" not in match.extra_mod_options["reinforcement_learning_scenario"]
     assert batch.match_configuration(0) == match
 
