@@ -25,6 +25,7 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
 python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
+python scripts/run_matches.py configurations/barb_versus_barb.py --matches 20 --parallel 2   # replace fields
 python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5   # replay a recorded match
 python scripts/plot_run.py runs/barb_versus_barb/version_1          # redraw all charts of a batch, no replay needed
 python scripts/browse_results.py                                    # web interface to browse all results
@@ -39,13 +40,20 @@ the players different factions; to compare artificial intelligences, give them d
 `map_name` is one map or a list: matches then take the maps in turn, so each map gets the same number of
 matches (see `configurations/factions_by_map_size.py`). Download maps first with
 `python scripts/download_game_data.py --map "<name>"`. Copy `barb_versus_barb.py` to start a new experiment;
-the editor completes and type-checks the fields. Results go to `runs/<name>/`:
+the editor completes and type-checks the fields.
+
+Both `run_match.py` and `run_matches.py` take the same configuration file (default:
+`configurations/barb_versus_barb.py`), and any field except `players` can be replaced on the command line with
+`--<field> <value>`, for example `--map_name "Comet Catcher Remake 1.8" --first_seed 7 --no-record_replays`
+(`--help` lists them). `run_match.py` runs one match of the series, `--match_index <i>` (seed `first_seed + i`,
+map `i % number of maps`), and can show it with `--graphical`. Results go to `runs/<name>/`:
 
 ```
 runs/<name>/
 ├── version_1/                  first run of the configuration; running it again adds version_2/, ...
 │   ├── overview.png            the six most telling charts, aggregated over all matches
 │   ├── configuration.py        copy of the configuration file used
+│   ├── configuration.json      the values actually used, after the command line, and the command line
 │   ├── summary.txt             statistics table: wins, durations, mean metal, damage, units per player
 │   ├── summary.json            the same plus every match
 │   ├── tables/                 matches.parquet, players.parquet, timeseries.parquet (see below)

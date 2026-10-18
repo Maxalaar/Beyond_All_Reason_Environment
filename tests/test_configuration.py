@@ -1,11 +1,20 @@
 """Fast tests that do not start the game engine."""
 
+import argparse
+import json
 from pathlib import Path
 
 import pytest
 
 from beyond_all_reason_environment import ArtificialIntelligencePlayer, BatchConfiguration, MatchConfiguration
-from beyond_all_reason_environment.batch import load_batch_configuration, new_version_directory
+from beyond_all_reason_environment.batch import (
+    DEFAULT_CONFIGURATION_FILE,
+    add_configuration_arguments,
+    configuration_from_arguments,
+    load_batch_configuration,
+    new_version_directory,
+    save_configuration,
+)
 from beyond_all_reason_environment.start_script import build_start_script
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -81,3 +90,51 @@ def test_list_of_maps_is_shared_equally():
     batch = BatchConfiguration(name="test", players=TWO_PLAYERS, matches=6, map_name=["Small", "Medium", "Large"])
     maps = [match.map_name for match in batch.match_configurations()]
     assert maps == ["Small", "Medium", "Large"] * 2
+
+
+def parse(command_line: list[str]) -> argparse.Namespace:
+    parser = argparse.ArgumentParser()
+    add_configuration_arguments(parser)
+    return parser.parse_args(command_line)
+
+
+def test_without_file_the_default_configuration_is_used():
+    assert configuration_from_arguments(parse([])) == load_batch_configuration(DEFAULT_CONFIGURATION_FILE)
+
+
+def test_command_line_replaces_only_the_fields_given():
+    path = REPOSITORY_ROOT / "configurations" / "barb_versus_barb.py"
+    file = load_batch_configuration(path)
+    configuration = configuration_from_arguments(
+        parse([str(path), "--matches", "3", "--maximum_game_minutes", "2.5", "--no-record_replays"])
+    )
+    assert (configuration.matches, configuration.maximum_game_minutes, configuration.record_replays) == (3, 2.5, False)
+    assert (configuration.name, configuration.parallel, configuration.players) == (
+        file.name,
+        file.parallel,
+        file.players,
+    )
+
+
+def test_one_map_stays_a_name_and_several_make_a_list():
+    assert configuration_from_arguments(parse(["--map_name", "Small"])).map_name == "Small"
+    assert configuration_from_arguments(parse(["--map_name", "Small", "Large"])).map_name == ["Small", "Large"]
+
+
+def test_replaced_values_are_checked_like_the_file():
+    with pytest.raises(ValueError):
+        configuration_from_arguments(parse(["--parallel", "0"]))
+
+
+def test_one_match_of_a_series_matches_the_batch_and_may_go_beyond_it():
+    batch = BatchConfiguration(name="test", players=TWO_PLAYERS, matches=2, first_seed=5, map_name=["Small", "Large"])
+    assert batch.match_configuration(1) == batch.match_configurations()[1]
+    beyond = batch.match_configuration(2)
+    assert (beyond.seed, beyond.map_name) == (7, "Small")
+
+
+def test_saved_configuration_has_the_values_after_the_command_line(tmp_path):
+    arguments = parse(["--matches", "3"])
+    save_configuration(tmp_path, configuration_from_arguments(arguments), arguments)
+    assert json.loads((tmp_path / "configuration.json").read_text())["configuration"]["matches"] == 3
+    assert (tmp_path / "configuration.py").read_text() == DEFAULT_CONFIGURATION_FILE.read_text()

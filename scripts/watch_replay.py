@@ -1,6 +1,6 @@
 """Watch a recorded match in a window. + and - change the speed during the replay.
 
-Matches are recorded when record_replays=True in the configuration file (or run_match.py --record-replay).
+Matches are recorded when record_replays=True in the configuration file (or with --record_replays on the command line).
 
 Examples:
     python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1/replay.sdfz

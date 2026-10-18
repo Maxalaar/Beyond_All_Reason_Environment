@@ -1,12 +1,18 @@
 """Run the matches described by a configuration file, in parallel and without graphics, then print statistics.
 
-Example:
+Examples:
     python scripts/run_matches.py configurations/barb_versus_barb.py
+    python scripts/run_matches.py configurations/barb_versus_barb.py --matches 20 --parallel 2
+    python scripts/run_matches.py --map_name "Red Comet Remake 1.8" "Comet Catcher Remake 1.8"
+
+Without a file, configurations/barb_versus_barb.py is used. Any field of the file can be replaced on the
+command line (--<field> <value>, see --help); the players stay in the file.
 
 Results go to runs/<name>/version_<n>/, where <name> comes from the configuration file; running it again
 adds version_<n+1>/ next to the earlier ones:
     overview.png         the six most telling charts, aggregated over the matches
     configuration.py     copy of the configuration file used
+    configuration.json   the values actually used, after the command line, and the command line itself
     summary.txt          the statistics table printed at the end
     summary.json         the summary and every match
     tables/              matches.parquet, players.parquet, timeseries.parquet, for analysis (see tables.py)
@@ -17,15 +23,15 @@ adds version_<n+1>/ next to the earlier ones:
 """
 
 import argparse
-import shutil
-from pathlib import Path
 
 from beyond_all_reason_environment.batch import (
+    add_configuration_arguments,
+    configuration_from_arguments,
     format_summary,
-    load_batch_configuration,
     new_version_directory,
     run_matches,
     save_batch,
+    save_configuration,
     summarise,
 )
 from beyond_all_reason_environment.match import RUNS_DIRECTORY, MatchResult
@@ -45,12 +51,12 @@ def describe(result: MatchResult) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("configuration", type=Path, help="Python configuration file, see configurations/")
+    add_configuration_arguments(parser)
     arguments = parser.parse_args()
 
-    batch = load_batch_configuration(arguments.configuration)
+    batch = configuration_from_arguments(arguments)
     batch_directory = new_version_directory(RUNS_DIRECTORY / batch.name)
-    shutil.copy(arguments.configuration, batch_directory / "configuration.py")
+    save_configuration(batch_directory, batch, arguments)
 
     configurations = batch.match_configurations()
     print(f"{batch.name}: {batch.matches} matches, {batch.parallel} at a time, in {batch_directory}")

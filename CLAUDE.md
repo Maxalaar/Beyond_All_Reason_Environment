@@ -30,10 +30,12 @@ so the environment must match its interface (to confirm).
 - Later: imitation pre-training on Beyond All Reason's public replays (.sdfz), AlphaStar-style.
 
 ## Roadmap (start small)
-- [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (BARb vs BARb headless → winner,
-      `--graphical` to watch), `scripts/run_matches.py configurations/<file>.py`
+- [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (one match of a configuration headless →
+      winner, `--graphical` to watch), `scripts/run_matches.py configurations/<file>.py`
       (Python file defining `configuration = BatchConfiguration(...)`; parallel batch, statistics and
-      charts into `runs/<name>/`; `batch.py`, `plots.py`).
+      charts into `runs/<name>/`; `batch.py`, `plots.py`). Both take the same file (default barb_versus_barb.py)
+      and `--<field> <value>` replaces any field but `players` (generated from the dataclass fields in
+      `batch.add_configuration_arguments`); `run_matches.py` saves the values used in configuration.json.
 - [ ] Micro environment (5 v 5), agreed design below. Phase 0: game extension + Lua <-> Python socket +
       synchronous step(), measure speed [done]; phase 1: scenario gadget [done]; phase 2: Python environment
       (no RLlib) [done: MicroEnvironment];

@@ -1,16 +1,20 @@
 """Run several matches in parallel, described by a Python configuration file, and summarise them."""
 
+import argparse
 import importlib.util
 import json
 import random
 import re
+import shutil
 import statistics
+import sys
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
+from typing import get_type_hints
 
-from .installation import DEFAULT_MAP
+from .installation import DEFAULT_MAP, REPOSITORY_ROOT
 from .match import MatchResult, read_match_result, run_match
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration, Side
 
@@ -61,27 +65,25 @@ class BatchConfiguration:
 
     def match_configurations(self) -> list[MatchConfiguration]:
         """One configuration per match; players with several factions get one drawn from their list."""
-        configurations = []
-        for index in range(self.matches):
-            seed = self.first_seed + index
-            configurations.append(
-                MatchConfiguration(
-                    players=[
-                        ArtificialIntelligencePlayer(
-                            player.short_name, player.version, _draw_side(player, seed, number)
-                        )
-                        for number, player in enumerate(self.players)
-                    ],
-                    map_name=self.map_name
-                    if isinstance(self.map_name, str)
-                    else self.map_name[index % len(self.map_name)],
-                    seed=seed,
-                    maximum_game_minutes=self.maximum_game_minutes,
-                    record_replay=self.record_replays,
-                    keep_engine_files=self.keep_engine_files,
-                )
-            )
-        return configurations
+        return [self.match_configuration(index) for index in range(self.matches)]
+
+    def match_configuration(self, index: int) -> MatchConfiguration:
+        """Match ``index`` of the series: seed first_seed + index, map index % number of maps.
+
+        ``index`` may go beyond ``matches``, to run one more match of the same series.
+        """
+        seed = self.first_seed + index
+        return MatchConfiguration(
+            players=[
+                ArtificialIntelligencePlayer(player.short_name, player.version, _draw_side(player, seed, number))
+                for number, player in enumerate(self.players)
+            ],
+            map_name=self.map_name if isinstance(self.map_name, str) else self.map_name[index % len(self.map_name)],
+            seed=seed,
+            maximum_game_minutes=self.maximum_game_minutes,
+            record_replay=self.record_replays,
+            keep_engine_files=self.keep_engine_files,
+        )
 
 
 def _draw_side(player: ArtificialIntelligencePlayer, seed: int, number: int) -> Side:
@@ -120,6 +122,76 @@ def load_batch_configuration(path: Path) -> BatchConfiguration:
     if not isinstance(configuration, BatchConfiguration):
         raise ValueError(f"{path} must define `configuration = BatchConfiguration(...)`")
     return configuration
+
+
+# Used by run_match.py and run_matches.py when no configuration file is given.
+DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "barb_versus_barb.py"
+# Fields that a command line option cannot replace: they stay in the configuration file.
+NOT_OVERRIDABLE_FIELDS = {"players"}
+
+
+def _overridable_fields() -> dict[str, object]:
+    """Field name -> type, for every field of BatchConfiguration that has a command line option."""
+    hints = get_type_hints(BatchConfiguration)
+    return {
+        field.name: hints[field.name]
+        for field in fields(BatchConfiguration)
+        if field.name not in NOT_OVERRIDABLE_FIELDS
+    }
+
+
+def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
+    """The configuration file, optional, and one --<field> option per field of BatchConfiguration to replace it.
+
+    Options take the exact field names (--map_name). Booleans also have a --no-<field> form; map_name takes
+    one map or several.
+    """
+    parser.add_argument(
+        "configuration",
+        type=Path,
+        nargs="?",
+        default=DEFAULT_CONFIGURATION_FILE,
+        help=f"Python configuration file, see configurations/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
+    )
+    group = parser.add_argument_group("replace a field of the configuration file")
+    for name, annotation in _overridable_fields().items():
+        options: dict = {"dest": f"override_{name}", "default": None}
+        if annotation is bool:
+            options["action"] = argparse.BooleanOptionalAction
+        elif annotation in (int, float, str):
+            options["type"] = annotation
+            options["metavar"] = annotation.__name__  # pyright: ignore[reportAttributeAccessIssue]
+        elif annotation == str | list[str]:
+            options["nargs"] = "+"
+            options["metavar"] = "str"
+        else:
+            raise TypeError(f"no command line option for the type of BatchConfiguration.{name}: {annotation}")
+        group.add_argument(f"--{name}", **options)
+
+
+def configuration_from_arguments(arguments: argparse.Namespace) -> BatchConfiguration:
+    """The configuration file of ``arguments``, with the fields given on the command line replaced."""
+    configuration = load_batch_configuration(arguments.configuration)
+    overrides = {}
+    for name in _overridable_fields():
+        value = getattr(arguments, f"override_{name}")
+        if value is None:
+            continue
+        # nargs="+" always gives a list; one map stays a plain name.
+        overrides[name] = value[0] if isinstance(value, list) and len(value) == 1 else value
+    # replace() runs __post_init__ again, so replaced values are checked like the ones of the file.
+    return replace(configuration, **overrides)
+
+
+def save_configuration(batch_directory: Path, configuration: BatchConfiguration, arguments: argparse.Namespace) -> None:
+    """configuration.py (copy of the file) and configuration.json (the values used, after the command line)."""
+    shutil.copy(arguments.configuration, batch_directory / "configuration.py")
+    content = {
+        "configuration_file": str(arguments.configuration),
+        "command_line": sys.argv[1:],
+        "configuration": asdict(configuration),
+    }
+    (batch_directory / "configuration.json").write_text(json.dumps(content, indent=2))
 
 
 def run_matches(
