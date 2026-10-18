@@ -4,13 +4,14 @@ Typical game: GameConfiguration(five_versus_five, controllers=[Agent(), HoldAndF
 self-play.
 """
 
-from ..scenario import ScenarioConfiguration, TeamConfiguration
+from ..scenario import ScenarioConfiguration, SpawnZone, TeamConfiguration
 from ..units import units
 
 five_versus_five = ScenarioConfiguration(
     teams=[
-        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}),
-        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}),
+        # Two small groups facing each other around the map centre.
+        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}, spawn_zone=SpawnZone(0.41, 0.44, 0.45, 0.55)),
+        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}, spawn_zone=SpawnZone(0.56, 0.59, 0.45, 0.55)),
     ],
     maximum_game_minutes=1.0,
     full_vision=True,

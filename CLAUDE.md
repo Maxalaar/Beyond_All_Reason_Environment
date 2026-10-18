@@ -91,6 +91,12 @@ so the environment must match its interface (to confirm).
   ArtificialIntelligencePlayer.label/display_name names players in charts and tables. Observation counts left to None follow
   the scenario. Armor types are the constant NUMBER_OF_ARMOR_TYPES (checked against the engine at start).
   Runs live in configurations/runs/ (one team per alliance: statistics count players as sides).
+- Spawn zones (agreed 2026-10-18): each placed unit starts uniformly at random in its team's SpawnZone (fractions of
+  the map); default from TeamConfiguration.spawn_depth = share of the alliance's band (map width split in equal
+  bands, in alliance order) from the edge, whole height, SPAWN_MARGIN 0.02 from the border; or an explicit
+  spawn_zone (a point for deterministic spawns: one_versus_one). Replaced group_separation/group_spread/spawn_jitter/
+  spawn_x_range. scenarios/armada_versus_cortex_battle.py: 300 vs 300 tier 1 mixed units on Red Comet, run
+  configuration of the same name with two AttackNearest (headless: Cortex won in 3.7 game minutes, 24 s).
 - Teams and alliances (agreed 2026-10-18): TeamConfiguration.allyteam groups teams (None = alone);
   ScenarioConfiguration.allyteams numbers them 0.. in order of appearance. Agents are the teams with Agent(), on any
   team and on several (self-play); agents are named team<t>_unit_<k>. One BridgeAI (first agent team) talks to

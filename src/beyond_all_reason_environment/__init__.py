@@ -26,7 +26,7 @@ from .reinforcement_learning_environment_configuration import (
     RewardWeights,
 )
 from .run import RunConfiguration
-from .scenario import ScenarioConfiguration, TeamConfiguration
+from .scenario import ScenarioConfiguration, SpawnZone, TeamConfiguration
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
 
 
@@ -55,6 +55,7 @@ __all__ = [
     "RewardWeights",
     "RunConfiguration",
     "ScenarioConfiguration",
+    "SpawnZone",
     "TeamConfiguration",
     "results_browser_path",
     "run_match",

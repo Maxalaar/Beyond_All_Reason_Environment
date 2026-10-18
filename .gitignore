@@ -3,7 +3,7 @@ game_data/
 # Read-only clones of upstream repositories, used as documentation
 reference/
 # One folder per launched match: logs, start script, results
-runs/
+/runs/
 
 # Python
 __pycache__/

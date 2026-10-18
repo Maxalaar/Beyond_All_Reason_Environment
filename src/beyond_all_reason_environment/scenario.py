@@ -13,10 +13,31 @@ import numpy as np
 from .installation import DEFAULT_MAP
 from .start_script import FRAMES_PER_SECOND, Side
 
+# Distance kept from the map border by the default spawn zones (fraction of the map), so no unit starts on the edge.
+SPAWN_MARGIN = 0.02
+
+
+@dataclass
+class SpawnZone:
+    """A rectangle of the map where a team's units start, each drawn uniformly at random inside it.
+
+    Fractions of the map: x from the west edge (0) to the east edge (1), z from the north edge (0) to the south edge
+    (1). A minimum equal to its maximum makes a line, or a point: deterministic positions.
+    """
+
+    x_minimum: float = 0.0
+    x_maximum: float = 1.0
+    z_minimum: float = 0.0
+    z_maximum: float = 1.0
+
+    def __post_init__(self) -> None:
+        if not (0 <= self.x_minimum <= self.x_maximum <= 1 and 0 <= self.z_minimum <= self.z_maximum <= 1):
+            raise ValueError(f"a spawn zone needs 0 <= minimum <= maximum <= 1 on x and z: {self}")
+
 
 @dataclass
 class TeamConfiguration:
-    """One team: its faction, how it starts, and the alliance it belongs to."""
+    """One team: its faction, how it starts (and where), and the alliance it belongs to."""
 
     # One faction, or a list: each game of a run then draws one (reproducibly, from the game's seed).
     side: Side | list[Side] = "Armada"
@@ -25,6 +46,17 @@ class TeamConfiguration:
     # Teams with the same allyteam number are allies: they share victory and vision, and never fight each other.
     # None: an alliance of its own. Numbers only group teams; their values do not matter.
     allyteam: int | None = None
+    # Where the placed units start, in [0, 1]: the share of the team's alliance band taken from the map edge. The
+    # alliances split the map width into equal bands, in order (two alliances: the west half and the east half);
+    # 1 fills the band, 0.2 only the fifth of it nearest the edge (a middle band is taken around its centre). The zone
+    # covers the whole map height, SPAWN_MARGIN apart from the border.
+    spawn_depth: float = 1.0
+    # An explicit zone instead, for full control (spawn_depth is then unused).
+    spawn_zone: SpawnZone | None = None
+
+    def __post_init__(self) -> None:
+        if not 0 <= self.spawn_depth <= 1:
+            raise ValueError(f"spawn_depth must be in [0, 1], not {self.spawn_depth}")
 
 
 @dataclass
@@ -45,16 +77,6 @@ class ScenarioConfiguration:
     # Every alliance sees the whole map. The reinforcement learning environment needs it: the engine drops attack
     # orders on units the team does not see.
     full_vision: bool = False
-
-    # Placed units: alliances spread along x, the units of an alliance spread along z (fractions of the map).
-    group_separation: float = 0.15
-    group_spread: float = 0.06
-    spawn_jitter: float = 0.01
-    # Spawn zone range in [0, 1]: controls how wide each alliance's spawn zone is along x.
-    # At 0.0 each alliance spawns at a single deterministic x (evenly spread across [0, 1]).
-    # At 1.0 each alliance occupies its full band of the map width.
-    # When None, the classic group_separation / group_spread / spawn_jitter logic is used instead.
-    spawn_x_range: float | None = None
 
     def __post_init__(self) -> None:
         if len(set(self.allyteams)) < 2:
@@ -94,6 +116,25 @@ class ScenarioConfiguration:
             counts[allyteam] += sum((team.units or {}).values())
         return counts
 
+    def spawn_zone(self, team_index: int) -> SpawnZone:
+        """Where the placed units of team ``team_index`` start: its spawn_zone, or the zone of its spawn_depth."""
+        team = self.teams[team_index]
+        if team.spawn_zone is not None:
+            return team.spawn_zone
+        allyteam, number = self.allyteams[team_index], self.number_of_allyteams
+        band_minimum, band_maximum = allyteam / number, (allyteam + 1) / number
+        width = (band_maximum - band_minimum - SPAWN_MARGIN) * team.spawn_depth
+        if allyteam == 0:  # anchored on the west edge
+            x_minimum = band_minimum + SPAWN_MARGIN
+            x_maximum = x_minimum + width
+        elif allyteam == number - 1:  # anchored on the east edge
+            x_maximum = band_maximum - SPAWN_MARGIN
+            x_minimum = x_maximum - width
+        else:  # a middle band: around its centre
+            centre = (band_minimum + band_maximum) / 2
+            x_minimum, x_maximum = centre - width / 2, centre + width / 2
+        return SpawnZone(x_minimum, x_maximum, SPAWN_MARGIN, 1 - SPAWN_MARGIN)
+
     @property
     def maximum_game_frames(self) -> int:
         return int(self.maximum_game_minutes * 60 * FRAMES_PER_SECOND)
@@ -102,43 +143,15 @@ class ScenarioConfiguration:
 def spawn_positions(scenario: ScenarioConfiguration, random: np.random.Generator) -> list[dict]:
     """One spawn entry per placed unit, in team order: {"team", "unit", "x", "z"}.
 
-    Alliances are spread evenly along x; the units of an alliance (all its teams together) are spread along z.
-
-    With spawn_x_range set, alliance a is centred at a / (N-1) along x, and the zone width
-    is spawn_x_range / (N-1) on each side (clipped to [0,1]).
-    spawn_x_range=0 gives deterministic positions at 0, 1/(N-1), …, 1.
-    spawn_x_range=1 gives each alliance its full 1/N slice of the map.
-
-    With spawn_x_range=None, the classic group_separation/group_spread/spawn_jitter logic is used,
-    with alliances placed at equal intervals of group_separation around the map centre.
+    Each unit is drawn uniformly at random in its team's spawn zone (ScenarioConfiguration.spawn_zone), from
+    ``random``: the same seed gives the same positions.
     """
-    allyteams = scenario.allyteams
-    n_allyteams = scenario.number_of_allyteams
-    spread = None if scenario.spawn_x_range is None else scenario.spawn_x_range / (2 * max(n_allyteams - 1, 1))
-    positions: dict[tuple[int, int], tuple[float, float]] = {}
-    for allyteam in range(n_allyteams):
-        # (team, rank of the unit in its team) of every unit of the alliance, in team order.
-        members = [
-            (team_index, rank)
-            for team_index, team in enumerate(scenario.teams)
-            if allyteams[team_index] == allyteam
-            for rank in range(sum((team.units or {}).values()))
-        ]
-        for index, member in enumerate(members):
-            offset = (index / (len(members) - 1) - 0.5) if len(members) > 1 else 0.0
-            if spread is not None:
-                base_x = allyteam / max(n_allyteams - 1, 1)
-                lo, hi = max(0.0, base_x - spread), min(1.0, base_x + spread)
-                x = float(lo if lo == hi else random.uniform(lo, hi))
-                jitter_z = float(random.uniform(-1, 1) * scenario.spawn_jitter)
-            else:
-                centre_x = 0.5 + (allyteam - (n_allyteams - 1) / 2) * scenario.group_separation
-                jitter_x, jitter_z = random.uniform(-1, 1, 2) * scenario.spawn_jitter
-                x = float(np.clip(centre_x + jitter_x, 0, 1))
-            z = float(np.clip(0.5 + offset * scenario.group_spread + jitter_z, 0, 1))
-            positions[member] = (x, z)
-    return [
-        {"team": team_index, "unit": name, "x": positions[(team_index, rank)][0], "z": positions[(team_index, rank)][1]}
-        for team_index, team in enumerate(scenario.teams)
-        for rank, name in enumerate(name for name, count in (team.units or {}).items() for _ in range(count))
-    ]
+    spawns = []
+    for team_index, team in enumerate(scenario.teams):
+        zone = scenario.spawn_zone(team_index)
+        for name, count in (team.units or {}).items():
+            for _ in range(count):
+                x = float(random.uniform(zone.x_minimum, zone.x_maximum))
+                z = float(random.uniform(zone.z_minimum, zone.z_maximum))
+                spawns.append({"team": team_index, "unit": name, "x": x, "z": z})
+    return spawns

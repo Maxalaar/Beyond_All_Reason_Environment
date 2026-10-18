@@ -43,7 +43,11 @@ ScenarioConfiguration ──► GameConfiguration ──┬──► RunConfigur
 - `ScenarioConfiguration` (predefined ones in `beyond_all_reason_environment.scenarios`): map, time limit, and the
   teams (`TeamConfiguration`): for each, its faction (`side`), its alliance (`allyteam`: teams with the same number
   are allies; by default each team is alone) and how it starts: normally (a commander), or with placed units
-  (`units`). It says nothing of who plays.
+  (`units`). It says nothing of who plays. Placed units start at random in their team's spawn zone: by default
+  `spawn_depth` (in [0, 1]), the share of the team's alliance band taken from the map edge (the alliances split the
+  map width into equal bands: with two, the west and east halves; 1 on both sides gives 50 % / 50 %, 0.2 keeps each
+  army in the fifth of its half nearest its edge), or an explicit `spawn_zone=SpawnZone(x_minimum, x_maximum,
+  z_minimum, z_maximum)` in fractions of the map (a point when minimum equals maximum).
 - `GameConfiguration(scenario, controllers)`: one controller per team, in the order of `scenario.teams`.
 - `RunConfiguration`: games of a `GameConfiguration` without Python, one or a series in parallel (`matches`,
   `parallel`, `first_seed`, `record_replays`), and `engine`: speed and window. Runs count one team per alliance.
@@ -139,7 +143,8 @@ of separate parts, each answering one question:
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
 Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`,
-`armada_versus_cortex`) and only define the situation: an experiment, for example a training configuration of
+`armada_versus_cortex`, `armada_versus_cortex_battle`: 300 units per army, bots, vehicles, artillery and aircraft)
+and only define the situation: an experiment, for example a training configuration of
 the reinforcement learning library, chooses the scenario, the controllers and the other parts. Self-play is a game
 with `Agent()`
 on both sides, for example `GameConfiguration(five_versus_five, [Agent(), Agent()])`.

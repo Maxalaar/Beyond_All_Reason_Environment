@@ -38,7 +38,13 @@ from beyond_all_reason_environment.reinforcement_learning_environment_configurat
     ObservationConfiguration,
     ReinforcementLearningEnvironmentConfiguration,
 )
-from beyond_all_reason_environment.scenario import ScenarioConfiguration, TeamConfiguration, spawn_positions
+from beyond_all_reason_environment.scenario import (
+    SPAWN_MARGIN,
+    ScenarioConfiguration,
+    SpawnZone,
+    TeamConfiguration,
+    spawn_positions,
+)
 from beyond_all_reason_environment.scenarios import five_versus_five, one_versus_one
 
 MAP_SIZE = (6144.0, 4096.0)
@@ -205,6 +211,36 @@ def test_spawns_put_agents_first_facing_the_opponent():
     assert spawns == spawn_positions(scenario, np.random.default_rng(0))
 
 
+def test_spawn_depth_takes_a_share_of_the_alliance_band_from_the_edge():
+    scenario = ScenarioConfiguration(
+        teams=[TeamConfiguration(units={"armpw": 200}, spawn_depth=0.2), TeamConfiguration(units={"armpw": 200})]
+    )
+    west, east = scenario.spawn_zone(0), scenario.spawn_zone(1)
+    assert west.x_minimum == pytest.approx(SPAWN_MARGIN)
+    assert west.x_maximum == pytest.approx(SPAWN_MARGIN + 0.2 * (0.5 - SPAWN_MARGIN))
+    # Depth 1: the whole east half (the margin apart), and the whole height.
+    assert (east.x_minimum, east.x_maximum) == pytest.approx((0.5, 1 - SPAWN_MARGIN))
+    assert (east.z_minimum, east.z_maximum) == pytest.approx((SPAWN_MARGIN, 1 - SPAWN_MARGIN))
+    spawns = spawn_positions(scenario, np.random.default_rng(0))
+    for spawn in spawns:
+        zone = scenario.spawn_zone(spawn["team"])
+        assert zone.x_minimum <= spawn["x"] <= zone.x_maximum and zone.z_minimum <= spawn["z"] <= zone.z_maximum
+    # Random inside the zone, the same for the same seed.
+    assert len({spawn["x"] for spawn in spawns}) == 400
+    assert spawns == spawn_positions(scenario, np.random.default_rng(0))
+
+
+def test_a_spawn_zone_may_be_a_point():
+    assert [(spawn["x"], spawn["z"]) for spawn in spawn_positions(one_versus_one, np.random.default_rng(3))] == [
+        (0.0, 0.5),
+        (1.0, 0.5),
+    ]
+    with pytest.raises(ValueError):
+        SpawnZone(0.6, 0.4)
+    with pytest.raises(ValueError):
+        TeamConfiguration(spawn_depth=1.5)
+
+
 def test_configuration_rejects_unknown_commands():
     with pytest.raises(ValueError):
         ActionConfiguration(commands={"default": ["dance"]})
@@ -263,8 +299,8 @@ def test_allied_teams_share_an_alliance_and_its_reward():
     assert (observation.maximum_ally_units, observation.maximum_enemy_units) == (1, 2)
     spawns = spawn_positions(scenario, np.random.default_rng(0))
     assert [spawn["team"] for spawn in spawns] == [0, 1, 2, 2]
-    # Both teams of alliance 0 spawn on the same side, apart along z.
-    assert spawns[0]["x"] == pytest.approx(spawns[1]["x"], abs=0.05) and spawns[0]["z"] != spawns[1]["z"]
+    # Both teams of alliance 0 spawn in its band, the west half of the map.
+    assert spawns[0]["x"] < 0.5 and spawns[1]["x"] < 0.5 and spawns[2]["x"] > 0.5
     before = raw_observation([unit(1, 0, 0.4, 0.5), unit(2, 1, 0.4, 0.6), unit(3, 2, 0.6, 0.5)])
     after = raw_observation([unit(1, 0, 0.4, 0.5), unit(2, 1, 0.4, 0.6, 185.0)])
     configuration = environment_configuration(scenario, controllers)
