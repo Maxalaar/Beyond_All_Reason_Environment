@@ -27,15 +27,15 @@ adds version_<n+1>/ next to the earlier ones:
 import argparse
 
 from beyond_all_reason_environment.match import RUNS_DIRECTORY, MatchResult
-from beyond_all_reason_environment.plots import plot_batch
+from beyond_all_reason_environment.plots import plot_run
 from beyond_all_reason_environment.run import (
     add_configuration_arguments,
     configuration_from_arguments,
     format_summary,
     new_version_directory,
     run_matches,
-    save_batch,
     save_configuration,
+    save_run,
     summarise,
 )
 from beyond_all_reason_environment.tables import write_tables
@@ -67,20 +67,20 @@ def main() -> None:
         configurations = run.match_configurations()
     else:
         configurations = [run.match_configuration(arguments.match_index)]
-    batch_directory = new_version_directory(RUNS_DIRECTORY / run.name)
-    save_configuration(batch_directory, run, arguments)
-    print(f"{run.name}: {len(configurations)} game(s), {run.games_at_once} at a time, in {batch_directory}")
+    version_directory = new_version_directory(RUNS_DIRECTORY / run.name)
+    save_configuration(version_directory, run, arguments)
+    print(f"{run.name}: {len(configurations)} game(s), {run.games_at_once} at a time, in {version_directory}")
 
     def on_result(index: int, result: MatchResult) -> None:
         print(f"  game {index:3d} (seed {configurations[index].seed}): {describe(result)}", flush=True)
 
-    results = run_matches(configurations, batch_directory, run.games_at_once, on_result, run.engine.graphics)
+    results = run_matches(configurations, version_directory, run.games_at_once, on_result, run.engine.graphics)
     summary = summarise(configurations, results)
-    save_batch(batch_directory, configurations, results, summary)
-    write_tables(batch_directory, configurations, results)
+    save_run(version_directory, configurations, results, summary)
+    write_tables(version_directory, configurations, results)
     print("\n" + format_summary(summary))
-    plot_batch(configurations, results, batch_directory)
-    print(f"Saved in {batch_directory}, overview: {batch_directory / 'overview.png'}")
+    plot_run(configurations, results, version_directory)
+    print(f"Saved in {version_directory}, overview: {version_directory / 'overview.png'}")
     replays = [result.replay_path for result in results if result.replay_path is not None]
     if len(replays) == 1:
         print(f"Replay: python scripts/watch_replay.py {replays[0]}")

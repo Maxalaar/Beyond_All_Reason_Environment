@@ -1,16 +1,17 @@
-"""Play a few episodes of the combat environment with a simple policy, to check it and measure its speed.
+"""Play a few episodes of the reinforcement learning environment with a simple policy, to check it and measure its
+speed.
 
 Policies:
     random    each agent picks an allowed command and a random point of the map
     attack    each agent clicks "attack" on the nearest enemy (should win against a passive opponent)
 
 Examples:
-    python scripts/try_combat_environment.py --policy attack --episodes 5
-    python scripts/try_combat_environment.py --policy random --opponent HoldAndFire
-    python scripts/try_combat_environment.py --scenario one_versus_one --opponent AttackNearest
-    python scripts/try_combat_environment.py --opponent Agent   # self-play: the policy plays both sides
-    python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
-    python scripts/try_combat_environment.py --scenario one_versus_one --graphical --speed 2
+    python scripts/try_reinforcement_learning_environment.py --policy attack --episodes 5
+    python scripts/try_reinforcement_learning_environment.py --policy random --opponent HoldAndFire
+    python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --opponent AttackNearest
+    python scripts/try_reinforcement_learning_environment.py --opponent Agent   # self-play: the policy plays both sides
+    python scripts/try_reinforcement_learning_environment.py --policy attack --graphical --speed 2   # watch it
+    python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --graphical --speed 2
 """
 
 import argparse
@@ -30,7 +31,10 @@ from beyond_all_reason_environment import (
     ReinforcementLearningEnvironmentConfiguration,
     scenarios,
 )
-from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
+from beyond_all_reason_environment.reinforcement_learning_environment import (
+    ReinforcementLearningEnvironment,
+    state_feature_names,
+)
 from beyond_all_reason_environment.reinforcement_learning_environment_configuration import COMMANDS
 
 ATTACK = COMMANDS.index("attack")
@@ -83,7 +87,7 @@ def main() -> None:
     x_idx, z_idx = state_names.index("x"), state_names.index("z")
     random = np.random.default_rng(arguments.seed)
     start = time.monotonic()
-    with CombatEnvironment(configuration) as environment:
+    with ReinforcementLearningEnvironment(configuration) as environment:
         # Reward and information of the first agent team (with self-play, the other side's are the opposite).
         followed = environment.possible_agents[0].split("_unit_")[0] + "_unit_"
         steps = 0

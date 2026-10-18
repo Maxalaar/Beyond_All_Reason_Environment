@@ -1,6 +1,6 @@
 """Results as Parquet tables, for analysis across matches, versions and experiments.
 
-Each batch writes runs/<experiment>/version_<n>/tables/:
+Each run writes runs/<experiment>/version_<n>/tables/:
 
     matches.parquet     one row per match: seed, map, outcome, winner, duration...
     players.parquet     one row per player in a match: artificial intelligence, side, start position, won,
@@ -9,7 +9,7 @@ Each batch writes runs/<experiment>/version_<n>/tables/:
                         engine statistics and the metrics of metrics.py (metal_income, units_alive...)
 
 Every row carries ``match_id`` ("<experiment>/version_<n>/<match>"), ``experiment`` and ``version``, so the
-tables of all batches can be concatenated (``read_tables``) or queried together, for example with DuckDB:
+tables of all runs can be concatenated (``read_tables``) or queried together, for example with DuckDB:
 ``SELECT side, avg(won) FROM 'runs/*/version_*/tables/players.parquet' GROUP BY side``.
 """
 
@@ -35,15 +35,15 @@ def snake_case(name: str) -> str:
     return re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
 
 
-def experiment_and_version(batch_directory: Path) -> tuple[str, int]:
+def experiment_and_version(version_directory: Path) -> tuple[str, int]:
     """runs/<experiment>/version_<n> -> ("<experiment>", n)."""
-    return batch_directory.parent.name, int(batch_directory.name.removeprefix(VERSION_PREFIX))
+    return version_directory.parent.name, int(version_directory.name.removeprefix(VERSION_PREFIX))
 
 
 def build_tables(
-    batch_directory: Path, configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult]
+    version_directory: Path, configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult]
 ) -> dict[str, pd.DataFrame]:
-    experiment, version = experiment_and_version(batch_directory)
+    experiment, version = experiment_and_version(version_directory)
     matches, players, timeseries = [], [], []
     for index, (configuration, result) in enumerate(zip(configurations, results, strict=True)):
         match_id = f"{experiment}/{VERSION_PREFIX}{version}/{index:03d}"
@@ -118,12 +118,12 @@ def build_tables(
 
 
 def write_tables(
-    batch_directory: Path, configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult]
+    version_directory: Path, configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult]
 ) -> dict[str, Path]:
-    directory = batch_directory / TABLES_FOLDER
+    directory = version_directory / TABLES_FOLDER
     directory.mkdir(parents=True, exist_ok=True)
     paths = {}
-    for name, frame in build_tables(batch_directory, configurations, results).items():
+    for name, frame in build_tables(version_directory, configurations, results).items():
         paths[name] = directory / f"{name}.parquet"
         frame.to_parquet(paths[name], index=False)
     return paths

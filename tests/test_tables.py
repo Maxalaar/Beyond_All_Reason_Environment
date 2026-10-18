@@ -1,4 +1,4 @@
-"""Parquet tables and the statistics of the web interface, from a synthetic batch (no game engine)."""
+"""Parquet tables and the statistics of the web interface, from a synthetic run (no game engine)."""
 
 import math
 from pathlib import Path
@@ -8,16 +8,16 @@ import pytest
 from beyond_all_reason_environment.analysis import aggregate_over_time, wilson_interval, win_rates
 from beyond_all_reason_environment.tables import list_versions, read_tables, write_tables
 
-from .test_plots import synthetic_batch
+from .test_plots import synthetic_run
 
 
 @pytest.fixture
 def tables(tmp_path: Path):
-    batch_directory = tmp_path / "experiment" / "version_1"
-    configurations, results = synthetic_batch(batch_directory)
-    write_tables(batch_directory, configurations, results)
-    assert list_versions(tmp_path) == [batch_directory]
-    return read_tables([batch_directory])
+    version_directory = tmp_path / "experiment" / "version_1"
+    configurations, results = synthetic_run(version_directory)
+    write_tables(version_directory, configurations, results)
+    assert list_versions(tmp_path) == [version_directory]
+    return read_tables([version_directory])
 
 
 def test_tables_have_one_row_per_match_player_and_entry(tables):

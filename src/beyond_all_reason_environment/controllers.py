@@ -5,7 +5,7 @@
     HoldAndFire()                     the units do not move and shoot what comes in range
     AttackNearest(interval_seconds)   every interval, each unit attacks the nearest enemy
     BuiltInArtificialIntelligence()   an artificial intelligence of the game: BARb by default
-    Agent()                           the agents of the combat environment, played from Python
+    Agent()                           the agents of the reinforcement learning environment, played from Python
 
 Each controller says which artificial intelligence the engine runs for the team (``player``), the fire and move
 states of its placed units (``unit_states``) and the script the game extension's gadget runs for it, if any
@@ -115,10 +115,11 @@ class BuiltInArtificialIntelligence(Controller):
 
 @dataclass(frozen=True)
 class Agent(Controller):
-    """The agents of the combat environment: the BridgeAI forwards their observations and actions to Python.
+    """The agents of the reinforcement learning environment: the BridgeAI forwards their observations and actions to
+    Python.
 
-    Only the combat environment can run it, on any number of teams (several for self-play); their units' states come
-    from ActionConfiguration.
+    Only the reinforcement learning environment can run it, on any number of teams (several for self-play); their
+    units' states come from ActionConfiguration.
     """
 
     def player(self, side: Side | list[Side]) -> ArtificialIntelligencePlayer:

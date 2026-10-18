@@ -1,5 +1,5 @@
-"""Combat environment: encoding, rewards and spawns without the engine; one end-to-end check with it (marker
-"engine", run with `pytest -m engine`)."""
+"""Reinforcement learning environment: encoding, rewards and spawns without the engine; one end-to-end check with it
+(marker "engine", run with `pytest -m engine`)."""
 
 from dataclasses import replace
 from pathlib import Path
@@ -7,19 +7,6 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from beyond_all_reason_environment.combat_environment import (
-    CONTEXT_FEATURES,
-    NUMBER_OF_ARMOR_TYPES,
-    CombatEnvironment,
-    chassis_feature_names,
-    encode_observation,
-    merge_commands,
-    relative_allyteams,
-    state_feature_names,
-    team_reward,
-    visibility,
-    weapon_feature_names,
-)
 from beyond_all_reason_environment.controllers import (
     Agent,
     AttackNearest,
@@ -32,6 +19,19 @@ from beyond_all_reason_environment.controllers import (
 from beyond_all_reason_environment.game import GameConfiguration, controller_mod_options, unit_states
 from beyond_all_reason_environment.game_extension import extension_game_name, write_game_extension
 from beyond_all_reason_environment.installation import GAME_VERSION
+from beyond_all_reason_environment.reinforcement_learning_environment import (
+    CONTEXT_FEATURES,
+    NUMBER_OF_ARMOR_TYPES,
+    ReinforcementLearningEnvironment,
+    chassis_feature_names,
+    encode_observation,
+    merge_commands,
+    relative_allyteams,
+    state_feature_names,
+    team_reward,
+    visibility,
+    weapon_feature_names,
+)
 from beyond_all_reason_environment.reinforcement_learning_environment_configuration import (
     COMMANDS,
     ActionConfiguration,
@@ -273,7 +273,7 @@ def test_allied_teams_share_an_alliance_and_its_reward():
 
 
 def test_self_play_gives_one_agent_per_unit_of_each_agent_team():
-    environment = CombatEnvironment(environment_configuration(five_versus_five, [Agent(), Agent()]))
+    environment = ReinforcementLearningEnvironment(environment_configuration(five_versus_five, [Agent(), Agent()]))
     assert environment.possible_agents[:2] == ["team0_unit_0", "team0_unit_1"]
     assert environment.possible_agents[5:7] == ["team1_unit_0", "team1_unit_1"]
     players = environment._players(port=1234)
@@ -369,7 +369,7 @@ def test_attacking_the_nearest_enemy_beats_a_passive_opponent():
     configuration = environment_configuration(replace(five_versus_five, maximum_game_minutes=0.75))
     state_names = state_feature_names()
     x_idx, z_idx = state_names.index("x"), state_names.index("z")
-    with CombatEnvironment(configuration) as environment:
+    with ReinforcementLearningEnvironment(configuration) as environment:
         observations, _ = environment.reset(seed=0)
         assert set(observations) == set(environment.possible_agents)
         assert all(environment.observation_space(agent).contains(observations[agent]) for agent in observations)

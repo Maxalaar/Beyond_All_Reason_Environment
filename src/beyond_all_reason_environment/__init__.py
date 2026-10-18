@@ -1,7 +1,8 @@
 """Headless test harness and reinforcement learning environment for Beyond All Reason.
 
 ScenarioConfiguration (the situation) -> GameConfiguration (+ who plays each team) -> RunConfiguration (games without
-Python, scripts/run.py) or ReinforcementLearningEnvironmentConfiguration (CombatEnvironment, for the agents).
+Python, scripts/run.py) or ReinforcementLearningEnvironmentConfiguration (ReinforcementLearningEnvironment, for the
+agents).
 """
 
 from pathlib import Path

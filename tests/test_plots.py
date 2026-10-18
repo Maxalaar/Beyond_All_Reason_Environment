@@ -5,8 +5,8 @@ from pathlib import Path
 
 from beyond_all_reason_environment import MatchConfiguration
 from beyond_all_reason_environment.match import MatchResult
-from beyond_all_reason_environment.plots import METRICS, plot_batch
-from beyond_all_reason_environment.run import SUMMARISED_STATISTICS, load_batch, save_batch, summarise
+from beyond_all_reason_environment.plots import METRICS, plot_run
+from beyond_all_reason_environment.run import SUMMARISED_STATISTICS, load_run, save_run, summarise
 
 
 def synthetic_history(minutes: int, growth: float) -> list[dict]:
@@ -27,7 +27,7 @@ def synthetic_history(minutes: int, growth: float) -> list[dict]:
     ]
 
 
-def synthetic_batch(directory: Path) -> tuple[list[MatchConfiguration], list[MatchResult]]:
+def synthetic_run(directory: Path) -> tuple[list[MatchConfiguration], list[MatchResult]]:
     configurations, results = [], []
     for index, (minutes, winner) in enumerate([(20, 0), (30, 1), (25, 0)]):
         run_directory = directory / "matches" / f"match_{index}"
@@ -64,10 +64,10 @@ def synthetic_batch(directory: Path) -> tuple[list[MatchConfiguration], list[Mat
     return configurations, results
 
 
-def test_batch_charts_are_written(tmp_path: Path):
-    configurations, results = synthetic_batch(tmp_path)
+def test_run_charts_are_written(tmp_path: Path):
+    configurations, results = synthetic_run(tmp_path)
 
-    paths = plot_batch(configurations, results, tmp_path)
+    paths = plot_run(configurations, results, tmp_path)
 
     per_match = 1 + len(METRICS)  # overview + one chart per metric
     # outcomes, end of match, over time in minutes and relative, matches running, overview
@@ -80,11 +80,11 @@ def test_batch_charts_are_written(tmp_path: Path):
     assert (tmp_path / "matches" / "match_0" / "overview.png").exists()
 
 
-def test_saved_batch_loads_back(tmp_path: Path):
-    configurations, results = synthetic_batch(tmp_path)
-    save_batch(tmp_path, configurations, results, summarise(configurations, results))
+def test_saved_run_loads_back(tmp_path: Path):
+    configurations, results = synthetic_run(tmp_path)
+    save_run(tmp_path, configurations, results, summarise(configurations, results))
 
-    loaded_configurations, loaded_results = load_batch(tmp_path)
+    loaded_configurations, loaded_results = load_run(tmp_path)
 
     assert loaded_configurations == configurations
     assert [result.team_history for result in loaded_results] == [result.team_history for result in results]

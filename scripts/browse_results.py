@@ -1,10 +1,10 @@
-"""Open the web interface to browse the results of all batches, in the browser.
+"""Open the web interface to browse the results of all runs, in the browser.
 
 Example:
     python scripts/browse_results.py            # then open http://localhost:8501 if no tab opens
     python scripts/browse_results.py --port 8600
 
-Batches played before the Parquet tables existed need: python scripts/export_tables.py
+Runs played before the Parquet tables existed need: python scripts/export_tables.py
 """
 
 import argparse

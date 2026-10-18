@@ -231,20 +231,20 @@ def configuration_from_arguments(arguments: argparse.Namespace) -> RunConfigurat
     return replace(configuration, game=game, engine=engine, **overrides["run"])
 
 
-def save_configuration(batch_directory: Path, configuration: RunConfiguration, arguments: argparse.Namespace) -> None:
+def save_configuration(version_directory: Path, configuration: RunConfiguration, arguments: argparse.Namespace) -> None:
     """configuration.py (copy of the file) and configuration.json (the values used, after the command line)."""
-    shutil.copy(arguments.configuration, batch_directory / "configuration.py")
+    shutil.copy(arguments.configuration, version_directory / "configuration.py")
     content = {
         "configuration_file": str(arguments.configuration),
         "command_line": sys.argv[1:],
         "configuration": asdict(configuration),
     }
-    (batch_directory / "configuration.json").write_text(json.dumps(content, indent=2))
+    (version_directory / "configuration.json").write_text(json.dumps(content, indent=2))
 
 
 def run_matches(
     configurations: list[MatchConfiguration],
-    batch_directory: Path,
+    version_directory: Path,
     parallel: int,
     on_result: Callable[[int, MatchResult], None] | None = None,
     graphics: GraphicsConfiguration | None = None,
@@ -261,7 +261,7 @@ def run_matches(
             pool.submit(
                 run_match,
                 configuration,
-                batch_directory / "matches" / f"match_{index:03d}_seed{configuration.seed}",
+                version_directory / "matches" / f"match_{index:03d}_seed{configuration.seed}",
                 graphics,
             ): index
             for index, configuration in enumerate(configurations)
@@ -355,14 +355,14 @@ def format_summary(summary: dict) -> str:
     return "\n".join(lines) + "\n"
 
 
-def save_batch(
-    batch_directory: Path,
+def save_run(
+    version_directory: Path,
     configurations: list[MatchConfiguration],
     results: list[MatchResult],
     summary: dict,
 ) -> None:
     """Write summary.txt (the table) and summary.json (the summary and every match, for later analysis)."""
-    (batch_directory / "summary.txt").write_text(format_summary(summary))
+    (version_directory / "summary.txt").write_text(format_summary(summary))
     # The full statistics history stays in each match folder (match_result.json) and in the Parquet tables.
     matches = [
         {
@@ -373,20 +373,20 @@ def save_batch(
         for configuration, result in zip(configurations, results, strict=True)
     ]
     # default=str writes paths (replay_path) as text.
-    (batch_directory / "summary.json").write_text(
+    (version_directory / "summary.json").write_text(
         json.dumps({"summary": summary, "matches": matches}, indent=2, default=str)
     )
 
 
-def load_batch(batch_directory: Path) -> tuple[list[MatchConfiguration], list[MatchResult]]:
-    """Read back the matches of a finished batch (summary.json and each match_result.json), to redraw charts."""
-    content = json.loads((batch_directory / "summary.json").read_text())
+def load_run(version_directory: Path) -> tuple[list[MatchConfiguration], list[MatchResult]]:
+    """Read back the matches of a finished run (summary.json and each match_result.json), to redraw charts."""
+    content = json.loads((version_directory / "summary.json").read_text())
     configurations, results = [], []
     for match in content["matches"]:
         configuration = dict(match["configuration"])
         configuration["players"] = [ArtificialIntelligencePlayer(**player) for player in configuration["players"]]
         configurations.append(MatchConfiguration(**configuration))
-        # Found by name, so the batch folder can be moved or copied.
-        run_directory = batch_directory / "matches" / Path(match["run_directory"]).name
+        # Found by name, so the version folder can be moved or copied.
+        run_directory = version_directory / "matches" / Path(match["run_directory"]).name
         results.append(read_match_result(run_directory, len(configuration["players"]), match["wall_clock_seconds"]))
     return configurations, results

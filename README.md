@@ -36,7 +36,7 @@ The configuration is made of nested parts, from the situation to how it runs:
 ScenarioConfiguration ──► GameConfiguration ──┬──► RunConfiguration                              ──► scripts/run.py
   (the situation)         (+ who plays        │      (+ number of games, seeds, replays, engine)      (1 or N games)
                            each team)         │
-                                              └──► ReinforcementLearningEnvironmentConfiguration ──► CombatEnvironment
+                                              └──► ReinforcementLearningEnvironmentConfiguration ──► ReinforcementLearningEnvironment
                                                      (+ observation, actions, rewards, engine)          (agents, RLlib)
 ```
 
@@ -119,12 +119,12 @@ Earlier versions are never modified: a new run of the same configuration goes to
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.
 
-## Combat environment (reinforcement learning)
+## Reinforcement learning environment
 
-`CombatEnvironment` is a fight between alliances of teams, one agent (`team<t>_unit_<k>`) per unit of every team
+`ReinforcementLearningEnvironment` is a fight between alliances of teams, one agent (`team<t>_unit_<k>`) per unit of every team
 whose controller is `Agent()`, with the parallel interface
 of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces;
-`CombatMultiAgentEnvironment` wraps it for RLlib (`pip install -e ".[rllib]"`). Its
+`RayMultiAgentEnvironment` wraps it for RLlib (`pip install -e ".[rllib]"`). Its
 `ReinforcementLearningEnvironmentConfiguration` is made
 of separate parts, each answering one question:
 
@@ -151,22 +151,22 @@ alliance's. An episode ends when one alliance at most still has units.
 from beyond_all_reason_environment import (
     Agent, GameConfiguration, Passive, ReinforcementLearningEnvironmentConfiguration, RewardWeights,
 )
-from beyond_all_reason_environment.combat_environment import CombatEnvironment
+from beyond_all_reason_environment.reinforcement_learning_environment import ReinforcementLearningEnvironment
 from beyond_all_reason_environment.scenarios import one_versus_one
 
 configuration = ReinforcementLearningEnvironmentConfiguration(
     game=GameConfiguration(one_versus_one, controllers=[Agent(), Passive()]), rewards=RewardWeights(kill=0.0)
 )
-environment = CombatEnvironment(configuration)
+environment = ReinforcementLearningEnvironment(configuration)
 ```
 
 ```bash
-python scripts/try_combat_environment.py --policy attack --episodes 5            # check and measure speed
-python scripts/try_combat_environment.py --policy random --opponent HoldAndFire
-python scripts/try_combat_environment.py --scenario one_versus_one --opponent AttackNearest   # an opponent that attacks
-python scripts/try_combat_environment.py --opponent Agent   # self-play: the same policy plays both sides
-python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
-python scripts/try_combat_multi_agent_environment.py                              # through the RLlib wrapper
+python scripts/try_reinforcement_learning_environment.py --policy attack --episodes 5            # check and measure speed
+python scripts/try_reinforcement_learning_environment.py --policy random --opponent HoldAndFire
+python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --opponent AttackNearest   # an opponent that attacks
+python scripts/try_reinforcement_learning_environment.py --opponent Agent   # self-play: the same policy plays both sides
+python scripts/try_reinforcement_learning_environment.py --policy attack --graphical --speed 2   # watch it
+python scripts/try_ray_multi_agent_environment.py                              # through the RLlib wrapper
 ```
 
 - **Action**: `{"command": index in COMMANDS, "target": [x, z]}` with `(x, z)` a point of the map in `[0, 1]²`;
@@ -177,7 +177,7 @@ python scripts/try_combat_multi_agent_environment.py                            
 
 ## Analysis
 
-Each batch also writes Parquet tables in `runs/<name>/version_<n>/tables/`:
+Each run also writes Parquet tables in `runs/<name>/version_<n>/tables/`:
 
 | Table | One row per | Main columns |
 |---|---|---|
@@ -185,7 +185,7 @@ Each batch also writes Parquet tables in `runs/<name>/version_<n>/tables/`:
 | `players.parquet` | player in a match | artificial intelligence, side, start position, `won`, final statistics |
 | `timeseries.parquet` | player and statistics entry (every 15 s) | raw engine statistics and the metrics of the charts (`metal_income`, `units_alive`...) |
 
-Every row has `match_id`, `experiment` and `version`, so the tables of all batches can be analysed
+Every row has `match_id`, `experiment` and `version`, so the tables of all runs can be analysed
 together, with pandas (`tables.read_tables`) or DuckDB:
 
 ```sql
@@ -195,7 +195,7 @@ SELECT side, avg(won::int) FROM 'runs/*/version_*/tables/players.parquet' GROUP 
 `python scripts/browse_results.py` opens a web interface (Streamlit) on these tables: choose experiments
 and versions, compare by player, faction or artificial intelligence, see win rates with their 95 %
 confidence interval, curves over time (in game minutes or share of each match's duration), end-of-match
-statistics, start positions, and each match with its replay command. Batches played before the tables
+statistics, start positions, and each match with its replay command. Runs played before the tables
 existed need `python scripts/export_tables.py` once.
 
 ## Development

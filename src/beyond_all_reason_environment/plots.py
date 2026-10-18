@@ -1,15 +1,15 @@
-"""Charts of one match (statistics over time) and of a batch of matches (aggregated).
+"""Charts of one match (statistics over time) and of a run of matches (aggregated).
 
 Every metric gets its own chart file, sorted by category, and an overview image at the root of the
-match or batch folder gathers the six most telling ones:
+match or version folder gathers the six most telling ones:
 
     <match folder>/overview.png
     <match folder>/charts/{economy,military,units}/<metric>.png
-    <batch folder>/overview.png
-    <batch folder>/charts/outcomes/{wins,durations}.png
-    <batch folder>/charts/over_time/{economy,military,units}/<metric>.png, over_time/matches_running.png
-    <batch folder>/charts/over_time_relative/{economy,military,units}/<metric>.png  (x: share of match duration)
-    <batch folder>/charts/end_of_match/<statistic>.png, end_of_match/all.png
+    <version folder>/overview.png
+    <version folder>/charts/outcomes/{wins,durations}.png
+    <version folder>/charts/over_time/{economy,military,units}/<metric>.png, over_time/matches_running.png
+    <version folder>/charts/over_time_relative/{economy,military,units}/<metric>.png  (x: share of match duration)
+    <version folder>/charts/end_of_match/<statistic>.png, end_of_match/all.png
 
 Players keep the same color in every chart: player 0 blue, player 1 orange (validated colorblind-safe).
 """
@@ -32,11 +32,11 @@ from matplotlib.ticker import FuncFormatter, MaxNLocator, PercentFormatter  # no
 from .colors import GRID, NEUTRAL_COLOR, PLAYER_COLORS, SURFACE, TEXT_PRIMARY, TEXT_SECONDARY  # noqa: E402
 from .match import MatchResult  # noqa: E402
 from .metrics import (  # noqa: E402
-    BATCH_OVERVIEW,
     KEY_METRICS,
     MATCH_OVERVIEW,
     METRICS,
     METRICS_BY_NAME,
+    RUN_OVERVIEW,
     Metric,
     minutes_of,
 )
@@ -219,10 +219,10 @@ def plot_match(result: MatchResult, configuration: MatchConfiguration, match_dir
     return paths
 
 
-# --- Aggregation over a batch -----------------------------------------------------------------------------
+# --- Aggregation over a run -----------------------------------------------------------------------------
 
 
-def _batch_player_label(configurations: Sequence[MatchConfiguration], index: int) -> str:
+def _run_player_label(configurations: Sequence[MatchConfiguration], index: int) -> str:
     """'player 0: BARb (Armada)', or '(Armada/Legion)' for a player whose faction was drawn from a list."""
     sides = sorted({str(configuration.players[index].side) for configuration in configurations})
     return f"player {index}: {configurations[0].players[index].display_name} ({'/'.join(sides)})"
@@ -230,7 +230,7 @@ def _batch_player_label(configurations: Sequence[MatchConfiguration], index: int
 
 @dataclass
 class _Timeline:
-    """Common x-axis of the matches of a batch: game minutes, or share of each match's duration (relative).
+    """Common x-axis of the matches of a run: game minutes, or share of each match's duration (relative).
 
     In minutes, matches end at different times, so late values only describe the long matches: the
     curves stop when fewer than ``minimum_running`` matches are left. In relative time every match
@@ -290,7 +290,7 @@ def _resample(x: np.ndarray, values: np.ndarray, grid: np.ndarray, hold_after_en
     return resampled
 
 
-def _draw_batch_metric(metric: Metric, timeline: _Timeline, configurations: Sequence[MatchConfiguration]) -> Draw:
+def _draw_run_metric(metric: Metric, timeline: _Timeline, configurations: Sequence[MatchConfiguration]) -> Draw:
     """One thin line per match, then the median per player and the band from 25th to 75th percentile."""
 
     def draw(axes: Axes) -> None:
@@ -310,7 +310,7 @@ def _draw_batch_metric(metric: Metric, timeline: _Timeline, configurations: Sequ
                 warnings.simplefilter("ignore", RuntimeWarning)
                 low, median, high = np.nanpercentile(np.array(samples), [25, 50, 75], axis=0)
             axes.fill_between(grid[shown], low[shown], high[shown], color=color, alpha=0.15, linewidth=0)
-            axes.plot(grid[shown], median[shown], color=color, label=_batch_player_label(configurations, index))
+            axes.plot(grid[shown], median[shown], color=color, label=_run_player_label(configurations, index))
             _direct_label(axes, grid[shown], median[shown], f"player {index}", color)
         _finish_time_axes(axes, metric, timeline.x_label)
         if timeline.relative:
@@ -355,7 +355,7 @@ def _draw_wins(configurations: Sequence[MatchConfiguration], results: Sequence[M
         for index in range(len(configurations[0].players)):
             color = PLAYER_COLORS[index]
             wins = sum(result.winner == index for result in results)
-            rows.append((_batch_player_label(configurations, index) + " wins", wins, len(results), color))
+            rows.append((_run_player_label(configurations, index) + " wins", wins, len(results), color))
             sides = sorted({str(configuration.players[index].side) for configuration in configurations})
             if len(sides) > 1:
                 for side in sides:
@@ -432,15 +432,15 @@ def _draw_final_statistic(
     return draw
 
 
-def plot_batch(
-    configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult], batch_directory: Path
+def plot_run(
+    configurations: Sequence[MatchConfiguration], results: Sequence[MatchResult], version_directory: Path
 ) -> list[Path]:
     """Charts of every match in its own folder, then the aggregated ones: overview.png at the root of
-    ``batch_directory``, the others in its charts/ folder."""
+    ``version_directory``, the others in its charts/ folder."""
     paths: list[Path] = []
     for configuration, result in zip(configurations, results, strict=True):
         paths += plot_match(result, configuration, result.run_directory)
-    directory = batch_directory / CHARTS_FOLDER
+    directory = version_directory / CHARTS_FOLDER
 
     paths.append(_save_single(directory / "outcomes" / "wins.png", _draw_wins(configurations, results)))
     paths.append(_save_single(directory / "outcomes" / "durations.png", _draw_durations(results)))
@@ -465,11 +465,11 @@ def plot_batch(
         note = _aggregation_note(line)
         for metric in METRICS:
             path = directory / folder / metric.category / f"{metric.name}.png"
-            paths.append(_save_single(path, _draw_batch_metric(metric, line, configurations), note))
+            paths.append(_save_single(path, _draw_run_metric(metric, line, configurations), note))
     paths.append(_save_single(directory / "over_time" / "matches_running.png", _draw_matches_running(timeline)))
 
-    metric_draws = [_draw_batch_metric(METRICS_BY_NAME[name], timeline, configurations) for name in BATCH_OVERVIEW]
+    metric_draws = [_draw_run_metric(METRICS_BY_NAME[name], timeline, configurations) for name in RUN_OVERVIEW]
     overview = [*metric_draws[: len(KEY_METRICS)], _draw_wins(configurations, results), _draw_durations(results)]
     overview += metric_draws[len(KEY_METRICS) :]
-    paths.append(_save_overview(batch_directory / OVERVIEW_FILE_NAME, overview, _aggregation_note(timeline)))
+    paths.append(_save_overview(version_directory / OVERVIEW_FILE_NAME, overview, _aggregation_note(timeline)))
     return paths

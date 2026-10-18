@@ -63,17 +63,17 @@ so the environment must match its interface (to confirm).
   receiving actions from the widget through Spring.SendLuaRulesMsg.
 
 ## Micro environment, how it works (learned while building it, 2026-10-16)
-- Code (now the combat environment, driven by the native BridgeAI): reinforcement_learning_environment_configuration.py,
-  combat_environment.py, game.py, scenario.py, controllers.py,
-  combat_multi_agent_environment.py (RLlib wrapper, extra "rllib"), engine_configuration.py, scenarios/, flat_map.py,
-  game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_combat_environment.py,
-  tests/test_combat_environment.py (`pytest -m engine` for the end-to-end test).
+- Code (now ReinforcementLearningEnvironment, driven by the native BridgeAI; named CombatEnvironment until 2026-10-18): reinforcement_learning_environment_configuration.py,
+  reinforcement_learning_environment.py, game.py, scenario.py, controllers.py,
+  ray_multi_agent_environment.py (RLlib wrapper, extra "rllib"), engine_configuration.py, scenarios/, flat_map.py,
+  game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_reinforcement_learning_environment.py,
+  tests/test_reinforcement_learning_environment.py (`pytest -m engine` for the end-to-end test).
 - Configuration layout (agreed 2026-10-18, names chosen by the user): ScenarioConfiguration (scenario.py: the
   situation; map, time limit, teams = TeamConfiguration(side, units, allyteam), no controllers) -> GameConfiguration
   (game.py: scenario + controllers, one per team) -> RunConfiguration (run.py: game + matches, parallel, seeds,
   replays, engine; games without Python) or ReinforcementLearningEnvironmentConfiguration
   (reinforcement_learning_environment_configuration.py: game + observation + action + rewards + engine; for
-  CombatEnvironment). Scenarios (scenarios/<name>.py, variable named like the file) define only the situation; the
+  ReinforcementLearningEnvironment). Scenarios (scenarios/<name>.py, variable named like the file) define only the situation; the
   experiment (training configuration in Maxalaar_Reinforcement_Learning, configurations/beyond_all_reason/)
   chooses the controllers, observation, action and rewards. EngineConfiguration(speed None = 1000 headless, 1 with
   a window; graphics: GraphicsConfiguration | None) is shared; GraphicsConfiguration (sound off, borderless
@@ -98,7 +98,7 @@ so the environment must match its interface (to confirm).
   10240). The BridgeAI lists getFriendlyUnits + getEnemyUnits. Observations, rewards and info are per alliance and
   relative (alliance 0 = the observer's), enemy orders hidden; the visibility channel is computed in Python per
   alliance from sight ranges (the engine LOS map exists only for the BridgeAI's alliance). The reset observation
-  still lists the units the reset destroyed (commanders, previous episode) for one frame: CombatEnvironment keeps
+  still lists the units the reset destroyed (commanders, previous episode) for one frame: ReinforcementLearningEnvironment keeps
   only the spawned ones (before 2026-10-18 the initial health, hence the reward scale, counted the commanders).
 - Placed units in a match (no Python): the gadget reads mod option reinforcement_learning_scenario
   ("team,unit,x,z/...|states", "/" because ";" ends a start-script value) at frame 1, spawns the units, then removes
@@ -141,10 +141,10 @@ so the environment must match its interface (to confirm).
   Playback = graphical `spring <file.sdfz>`; the demo replays our `setspeed 1000` debug command, so
   `replay.py` adds `lua/replay_widgets/replay_speed.lua` to set the speed back at frame 2.
 - After each match `_tidy_run_directory` keeps only script.txt, match_result.json, engine_output.log,
-  replay.sdfz, charts/ (unless `keep_engine_files`). Batch layout: runs/<name>/version_<n>/{overview.png,charts/,matches/<match>/{overview.png,charts/}};
+  replay.sdfz, charts/ (unless `keep_engine_files`). Run layout: runs/<name>/version_<n>/{overview.png,charts/,matches/<match>/{overview.png,charts/}};
   each run of a configuration adds a version (`new_version_directory`), nothing is overwritten.
 - Charts (`plots.py`): `METRICS` registry (name, title, category, compute from all histories); every
-  metric gets one file per match and one aggregated file; overviews pick 6 (`MATCH_OVERVIEW`, `BATCH_OVERVIEW`).
+  metric gets one file per match and one aggregated file; overviews pick 6 (`MATCH_OVERVIEW`, `RUN_OVERVIEW`).
   The user's key metrics are metal income, energy income and units alive (`KEY_METRICS`, top row of overviews).
 - One color = one entry of `players` (the user wants to compare factions and, later, AIs). `side` is a faction or a
   list (drawn per match from the seed). No side swapping: start positions are already random per seed.

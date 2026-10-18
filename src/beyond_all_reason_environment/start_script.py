@@ -17,7 +17,7 @@ class ArtificialIntelligencePlayer:
     """A built-in artificial intelligence, for example BARb (``short_name="BARb"``).
 
     ``short_name`` is the folder name in game_data/engine/<version>/AI/Skirmish.
-    ``side`` is one faction, or a list of factions: in a batch, each match then draws one of them
+    ``side`` is one faction, or a list of factions: in a run, each match then draws one of them
     (reproducibly, from the match seed). A single match needs one faction.
     ``options`` is written as an [OPTIONS] block in the start script and is readable by the AI
     via SkirmishAI_OptionValues_getValueByKey (C) or similar.

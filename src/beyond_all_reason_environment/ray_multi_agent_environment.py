@@ -1,4 +1,4 @@
-"""RLlib MultiAgentEnv wrapper for CombatEnvironment.
+"""RLlib MultiAgentEnv wrapper for ReinforcementLearningEnvironment.
 
 Thin adapter: no business logic, pure delegation. Configuration is passed via
 ``env_config["configuration"]`` (a ReinforcementLearningEnvironmentConfiguration instance);
@@ -11,19 +11,19 @@ out); ``__all__`` in truncations is True when the episode ends by time limit onl
 
 from ray.rllib import MultiAgentEnv
 
-from beyond_all_reason_environment.combat_environment import CombatEnvironment
+from beyond_all_reason_environment.reinforcement_learning_environment import ReinforcementLearningEnvironment
 from beyond_all_reason_environment.reinforcement_learning_environment_configuration import (
     ReinforcementLearningEnvironmentConfiguration,
 )
 
 
-class CombatMultiAgentEnvironment(MultiAgentEnv):
+class RayMultiAgentEnvironment(MultiAgentEnv):
     def __init__(self, env_config=None):
         super().__init__()
         configuration: ReinforcementLearningEnvironmentConfiguration = (env_config or {}).get(
             "configuration"
         ) or ReinforcementLearningEnvironmentConfiguration()
-        self._env = CombatEnvironment(configuration)
+        self._env = ReinforcementLearningEnvironment(configuration)
         self.possible_agents = list(self._env.possible_agents)
         per_agent_obs = self._env.observation_space(self._env.possible_agents[0])
         per_agent_act = self._env.action_space(self._env.possible_agents[0])

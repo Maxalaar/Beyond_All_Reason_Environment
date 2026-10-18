@@ -1,10 +1,11 @@
-"""Combat environment: a fight between alliances of teams, one agent per unit of every team played by Agent().
+"""Reinforcement learning environment: a fight between alliances of teams, one agent per unit of every team played
+by Agent().
 
 Several agent teams make self-play; allies may be scripted teams. Everything an agent receives is seen from its own
 alliance: allies, enemies, alliance numbers (0 for its own), visibility and reward.
 
 The game is divided into three dimensions: resource gathering, production, and combat. This environment
-covers combat only — no commanders, no factories, no resource collection.
+covers combat only for now — placed units, no commanders, no factories, no resource collection.
 
 The interface follows PettingZoo's parallel API (reset, step, close, one dictionary entry per agent) without
 depending on it, so any reinforcement learning library can wrap it.
@@ -100,16 +101,20 @@ Timing: an agent decides every decision_interval_frames. BridgeAI runs inside th
 blocks on Python; the whole simulation pauses while Python computes actions, giving exact frame timing.
 """
 
+import contextlib
+import json
 import os
+import shutil
 import socket
+import subprocess
 from dataclasses import replace
 from datetime import datetime
+from pathlib import Path
 
 import numpy as np
 from gymnasium import spaces
 
 from .controllers import DoNothing
-from .environment import CONNECTION_TIMEOUT_SECONDS, Environment
 from .game import controller_mod_options, unit_states
 from .game_extension import extension_game_name
 from .installation import build_bridge_ai
@@ -117,6 +122,8 @@ from .match import RUNS_DIRECTORY, start_engine
 from .reinforcement_learning_environment_configuration import COMMANDS, ReinforcementLearningEnvironmentConfiguration
 from .scenario import spawn_positions
 from .start_script import FRAMES_PER_SECOND, MatchConfiguration
+
+CONNECTION_TIMEOUT_SECONDS = 300
 
 COMMAND_STATES = ("none", "move", "fight", "attack", "stop", "other")
 
@@ -528,14 +535,23 @@ def visibility(
     return grid
 
 
-class CombatEnvironment(Environment):
-    """One engine process running a combat scenario; episodes reset inside the match without reloading the game."""
+class ReinforcementLearningEnvironment:
+    """One engine process running a game; episodes reset inside the match without reloading the game.
 
-    metadata = {"name": "beyond_all_reason_combat"}
+    The PettingZoo parallel API contract: reset(), step(), close(), observation_space(agent), action_space(agent),
+    possible_agents and agents. The engine talks to Python over a TCP connection from the BridgeAI.
+    """
+
+    metadata = {"name": "beyond_all_reason"}
 
     def __init__(self, configuration: ReinforcementLearningEnvironmentConfiguration | None = None):
         self.configuration = configuration or ReinforcementLearningEnvironmentConfiguration()
-        super().__init__(self.configuration.engine)
+        self.agents: list[str] = []
+        self.run_directory: Path | None = None
+        self._process: subprocess.Popen | None = None
+        self._server: socket.socket | None = None
+        self._connection: socket.socket | None = None
+        self._reader = None
         game = self.configuration.game
         scenario = game.scenario
         # One agent per unit of every team the agents play: "team<t>_unit_<k>".
@@ -673,6 +689,42 @@ class CombatEnvironment(Environment):
 
     # --- Engine connection --------------------------------------------------------------------------------------
 
+    def _send(self, message: dict) -> None:
+        assert self._connection is not None
+        self._connection.sendall((json.dumps(message, separators=(",", ":")) + "\n").encode())
+
+    def _receive(self) -> dict:
+        assert self._reader is not None
+        line = self._reader.readline()
+        if not line:
+            log = self.run_directory / "engine_output.log" if self.run_directory else "the engine log"
+            raise RuntimeError(f"The engine closed the connection, see {log}")
+        return json.loads(line)
+
+    def close(self) -> None:
+        if self._connection is not None:
+            with contextlib.suppress(OSError):
+                self._send({"type": "quit"})
+        if self._process is not None:
+            try:
+                self._process.wait(timeout=60)
+            except subprocess.TimeoutExpired:
+                self._process.kill()
+                self._process.wait()
+        for resource in (self._reader, self._connection, self._server):
+            if resource is not None:
+                resource.close()
+        self._process = self._connection = self._server = self._reader = None
+        self.agents = []
+        if self.run_directory is not None and not self.configuration.engine.keep_run_directory:
+            shutil.rmtree(self.run_directory, ignore_errors=True)
+
+    def __enter__(self) -> "ReinforcementLearningEnvironment":
+        return self
+
+    def __exit__(self, *exception) -> None:
+        self.close()
+
     def _players(self, port: int) -> list:
         """The BridgeAI on the first agent team (it talks to Python for every agent team); NullAI on the other agent
         teams, whose orders the gadget gives; each other team's own controller."""
@@ -700,7 +752,9 @@ class CombatEnvironment(Environment):
         configuration = self.configuration
         build_bridge_ai()
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        self.run_directory = RUNS_DIRECTORY / "combat_environments" / f"{timestamp}_{os.getpid()}_{id(self) % 100000}"
+        self.run_directory = (
+            RUNS_DIRECTORY / "reinforcement_learning_environments" / f"{timestamp}_{os.getpid()}_{id(self) % 100000}"
+        )
         self._server = socket.create_server(("127.0.0.1", 0))
         self._server.settimeout(CONNECTION_TIMEOUT_SECONDS)
         port = self._server.getsockname()[1]
@@ -730,7 +784,7 @@ class CombatEnvironment(Environment):
         if engine_armor_types != NUMBER_OF_ARMOR_TYPES:
             raise RuntimeError(
                 f"The engine reports {engine_armor_types} armor types, NUMBER_OF_ARMOR_TYPES is "
-                f"{NUMBER_OF_ARMOR_TYPES}: update it in combat_environment.py for this game version."
+                f"{NUMBER_OF_ARMOR_TYPES}: update it in reinforcement_learning_environment.py for this game version."
             )
         terrain_w, terrain_h = self.configuration.observation.terrain_resolution
         terrain_msg = self._receive()

@@ -52,16 +52,16 @@ def test_start_script_lifts_speed_limit_and_stops_at_time_limit():
 
 
 def test_each_player_keeps_its_side_and_seeds_follow():
-    batch = RunConfiguration(name="test", game=game(), matches=3)
-    matches = batch.match_configurations()
+    run = RunConfiguration(name="test", game=game(), matches=3)
+    matches = run.match_configurations()
     assert [[player.side for player in match.players] for match in matches] == [["Armada", "Cortex"]] * 3
     assert [match.seed for match in matches] == [1, 2, 3]
 
 
 def test_list_of_sides_is_drawn_reproducibly_per_match():
-    batch = RunConfiguration(name="test", game=game([["Armada", "Cortex", "Legion"], "Armada"]), matches=30)
-    drawn = [match.players[0].side for match in batch.match_configurations()]
-    assert drawn == [match.players[0].side for match in batch.match_configurations()]
+    run = RunConfiguration(name="test", game=game([["Armada", "Cortex", "Legion"], "Armada"]), matches=30)
+    drawn = [match.players[0].side for match in run.match_configurations()]
+    assert drawn == [match.players[0].side for match in run.match_configurations()]
     assert set(drawn) == {"Armada", "Cortex", "Legion"}
 
 
@@ -96,7 +96,7 @@ def test_unknown_side_is_rejected():
         ),
     ],
 )
-def test_invalid_batch_configuration_is_rejected(build):
+def test_invalid_run_configuration_is_rejected(build):
     with pytest.raises(ValueError):
         build()
 
@@ -112,8 +112,8 @@ def test_placed_units_and_commanders_do_not_mix():
 
 
 def test_a_scenario_with_placed_units_is_set_up_by_the_game_extension():
-    batch = RunConfiguration(name="test", game=GameConfiguration(one_versus_one, [AttackNearest(), Passive()]))
-    match = batch.match_configuration(0)
+    run = RunConfiguration(name="test", game=GameConfiguration(one_versus_one, [AttackNearest(), Passive()]))
+    match = run.match_configuration(0)
     assert [player.display_name for player in match.players] == ["AttackNearest", "Passive"]
     assert match.game_version == extension_game_name()
     assert match.extra_mod_options["deathmode"] == "killall"
@@ -122,7 +122,7 @@ def test_a_scenario_with_placed_units_is_set_up_by_the_game_extension():
     # AttackNearest fires at will and manoeuvres; the Passive Pawn holds fire and position.
     assert spawns.count("/") == 1 and states == "2,1,0,0"
     assert ";" not in match.extra_mod_options["reinforcement_learning_scenario"]
-    assert batch.match_configuration(0) == match
+    assert run.match_configuration(0) == match
 
 
 def test_a_normal_start_uses_the_plain_game():
@@ -149,8 +149,8 @@ def test_each_run_of_a_name_gets_a_new_version(tmp_path):
 
 
 def test_list_of_maps_is_shared_equally():
-    batch = RunConfiguration(name="test", game=game(map_name=["Small", "Medium", "Large"]), matches=6)
-    maps = [match.map_name for match in batch.match_configurations()]
+    run = RunConfiguration(name="test", game=game(map_name=["Small", "Medium", "Large"]), matches=6)
+    maps = [match.map_name for match in run.match_configurations()]
     assert maps == ["Small", "Medium", "Large"] * 2
 
 
@@ -190,10 +190,10 @@ def test_replaced_values_are_checked_like_the_file():
         configuration_from_arguments(parse(["--parallel", "0"]))
 
 
-def test_one_match_of_a_series_matches_the_batch_and_may_go_beyond_it():
-    batch = RunConfiguration(name="test", game=game(map_name=["Small", "Large"]), matches=2, first_seed=5)
-    assert batch.match_configuration(1) == batch.match_configurations()[1]
-    beyond = batch.match_configuration(2)
+def test_one_match_of_a_series_matches_the_run_and_may_go_beyond_it():
+    run = RunConfiguration(name="test", game=game(map_name=["Small", "Large"]), matches=2, first_seed=5)
+    assert run.match_configuration(1) == run.match_configurations()[1]
+    beyond = run.match_configuration(2)
     assert (beyond.seed, beyond.map_name) == (7, "Small")
 
 

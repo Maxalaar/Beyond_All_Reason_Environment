@@ -4,8 +4,8 @@ Uses the 1v1 curriculum scenario (passive opponent) with the default observation
 Each agent picks its allowed commands randomly and targets a random map point.
 
 Examples:
-    python scripts/try_combat_multi_agent_environment.py
-    python scripts/try_combat_multi_agent_environment.py --episodes 5
+    python scripts/try_ray_multi_agent_environment.py
+    python scripts/try_ray_multi_agent_environment.py --episodes 5
 """
 
 import argparse
@@ -19,7 +19,7 @@ from beyond_all_reason_environment import (
     Passive,
     ReinforcementLearningEnvironmentConfiguration,
 )
-from beyond_all_reason_environment.combat_multi_agent_environment import CombatMultiAgentEnvironment
+from beyond_all_reason_environment.ray_multi_agent_environment import RayMultiAgentEnvironment
 from beyond_all_reason_environment.reinforcement_learning_environment_configuration import COMMANDS
 from beyond_all_reason_environment.scenarios import one_versus_one
 
@@ -51,7 +51,7 @@ def main() -> None:
 
     game = GameConfiguration(one_versus_one, controllers=[Agent(), Passive()])
     configuration = ReinforcementLearningEnvironmentConfiguration(game=game)
-    env = CombatMultiAgentEnvironment(env_config={"configuration": configuration})
+    env = RayMultiAgentEnvironment(env_config={"configuration": configuration})
     print(f"agents: {env.possible_agents}")
     first_agent = env.possible_agents[0]
     print(f"observation_space keys: {sorted(env.observation_spaces[first_agent].spaces)}")

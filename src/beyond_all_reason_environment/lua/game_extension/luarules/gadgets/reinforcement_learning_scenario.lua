@@ -2,8 +2,8 @@
 --
 -- Two ways to start a scenario:
 --
--- 1. Combat environment (combat_environment.py): the BridgeAI (C Skirmish AI, on the first agent team) sends its
---    requests via gadget:RecvSkirmishAIMessage. The BridgeAI calls COMMAND_CALL_LUA_RULES, which invokes this
+-- 1. Reinforcement learning environment (reinforcement_learning_environment.py): the BridgeAI (C Skirmish AI, on the
+--    first agent team) sends its requests via gadget:RecvSkirmishAIMessage. The BridgeAI calls COMMAND_CALL_LUA_RULES, which invokes this
 --    handler synchronously, in the same frame — no server-lead delay.
 --      "rl_reset|<episode>|<team>,<unit>,<x>,<z>;...|<t0_fire>,<t0_move>,<t1_fire>,<t1_move>,..."
 --         Returns: "<unit_id>,<unit_id>,..." (spawn order).

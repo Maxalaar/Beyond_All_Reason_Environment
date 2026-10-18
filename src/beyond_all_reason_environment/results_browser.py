@@ -1,4 +1,4 @@
-"""Web interface to browse the results of all batches, from their Parquet tables (tables.py).
+"""Web interface to browse the results of all runs, from their Parquet tables (tables.py).
 
 Started by scripts/browse_results.py (``streamlit run`` on this file).
 """

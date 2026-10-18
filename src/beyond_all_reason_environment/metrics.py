@@ -134,5 +134,5 @@ METRICS_BY_NAME = {metric.name: metric for metric in METRICS}
 KEY_METRICS = ["metal_income", "energy_income", "units_alive"]
 # Match overview: the key metrics, then three more.
 MATCH_OVERVIEW = [*KEY_METRICS, "metal_produced_share", "damage_dealt", "units_killed"]
-# Batch overview: the key metrics, then the outcomes, durations and this one.
-BATCH_OVERVIEW = [*KEY_METRICS, "metal_produced_share"]
+# Run overview: the key metrics, then the outcomes, durations and this one.
+RUN_OVERVIEW = [*KEY_METRICS, "metal_produced_share"]

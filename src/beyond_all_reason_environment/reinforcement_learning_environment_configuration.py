@@ -1,5 +1,5 @@
-"""Configuration of the reinforcement learning environment (CombatEnvironment: unit fights, no production or
-resource gathering).
+"""Configuration of the reinforcement learning environment (ReinforcementLearningEnvironment: unit fights, no
+production or resource gathering for now).
 
 A ReinforcementLearningEnvironmentConfiguration is made of separate parts, each answering one question:
 
@@ -114,7 +114,8 @@ class RewardWeights:
 
 @dataclass
 class ReinforcementLearningEnvironmentConfiguration:
-    """Everything a CombatEnvironment needs: a game, and how the agents see, act and are rewarded in it."""
+    """Everything a ReinforcementLearningEnvironment needs: a game, and how the agents see, act and are rewarded in
+    it."""
 
     game: GameConfiguration = field(
         default_factory=lambda: GameConfiguration(five_versus_five, controllers=[Agent(), HoldAndFire()])

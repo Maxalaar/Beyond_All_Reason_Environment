@@ -37,7 +37,8 @@ class EngineConfiguration:
     speed: float | None = None
     # None: no window (the headless engine binary).
     graphics: GraphicsConfiguration | None = field(default=None)
-    # Keep runs/combat_environments/<run>/ (start script, engine log) after the environment closes, for debugging.
+    # Keep runs/reinforcement_learning_environments/<run>/ (start script, engine log) after the environment closes,
+    # for debugging.
     keep_run_directory: bool = False
 
     @property
