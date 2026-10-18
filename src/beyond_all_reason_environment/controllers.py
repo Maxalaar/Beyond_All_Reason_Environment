@@ -1,4 +1,4 @@
-"""Controllers: who plays an allyteam of a scenario, and how. Give one to each AllyteamConfiguration.
+"""Controllers: who plays a team of a scenario, and how. Give one to each TeamConfiguration.
 
     DoNothing()                       the units keep their default states and receive no order
     Passive()                         the units do not move and do not shoot
@@ -7,7 +7,7 @@
     BuiltInArtificialIntelligence()   an artificial intelligence of the game: BARb by default
     Agent()                           the agents of the combat environment, played from Python
 
-Each controller says which artificial intelligence the engine runs for the allyteam (``player``), the fire and move
+Each controller says which artificial intelligence the engine runs for the team (``player``), the fire and move
 states of its placed units (``unit_states``) and the script the game extension's gadget runs for it, if any
 (``gadget_script``). The scripted controllers run in the gadget, in Lua: they need no Python and also play in
 matches. Adding a controller means a subclass here, and for a scripted one a function in the gadget
@@ -29,20 +29,20 @@ NULL_ARTIFICIAL_INTELLIGENCE = ("NullAI", "0.1")
 
 @dataclass(frozen=True)
 class Controller:
-    """Base class: an allyteam whose engine artificial intelligence does nothing (NullAI)."""
+    """Base class: a team whose engine artificial intelligence does nothing (NullAI)."""
 
     @property
     def label(self) -> str:
-        """Name of the allyteam's player in charts and tables."""
+        """Name of the team's player in charts and tables."""
         return type(self).__name__
 
     def player(self, side: Side | list[Side]) -> ArtificialIntelligencePlayer:
-        """The artificial intelligence the engine runs for the allyteam."""
+        """The artificial intelligence the engine runs for the team."""
         short_name, version = NULL_ARTIFICIAL_INTELLIGENCE
         return ArtificialIntelligencePlayer(short_name=short_name, version=version, side=side, label=self.label)
 
     def unit_states(self) -> tuple[int, int]:
-        """Fire and move states given to the allyteam's placed units (DEFAULT_STATE keeps the unit's own)."""
+        """Fire and move states given to the team's placed units (DEFAULT_STATE keeps the unit's own)."""
         return (DEFAULT_STATE, DEFAULT_STATE)
 
     def gadget_script(self) -> str | None:
@@ -117,7 +117,8 @@ class BuiltInArtificialIntelligence(Controller):
 class Agent(Controller):
     """The agents of the combat environment: the BridgeAI forwards their observations and actions to Python.
 
-    Only the combat environment can run it (allyteam 0); their units' states come from ActionConfiguration.
+    Only the combat environment can run it, on any number of teams (several for self-play); their units' states come
+    from ActionConfiguration.
     """
 
     def player(self, side: Side | list[Side]) -> ArtificialIntelligencePlayer:

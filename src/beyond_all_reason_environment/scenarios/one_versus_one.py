@@ -12,15 +12,15 @@ Typical usage:
 """
 
 from ..controllers import Agent, Passive
-from ..scenario import AllyteamConfiguration, ScenarioConfiguration
+from ..scenario import ScenarioConfiguration, TeamConfiguration
 from ..units import units
 
 one_versus_one = ScenarioConfiguration(
     map_name="flat_arena_1024x1024",
     flat_map_squares=(128, 128),  # 128 squares × 8 elmos = 1024 elmos
-    allyteams=[
-        AllyteamConfiguration(controller=Agent(), units={units.armada.bot.t1.pawn: 1}),
-        AllyteamConfiguration(controller=Passive(), units={units.armada.bot.t1.pawn: 1}),
+    teams=[
+        TeamConfiguration(controller=Agent(), units={units.armada.bot.t1.pawn: 1}),
+        TeamConfiguration(controller=Passive(), units={units.armada.bot.t1.pawn: 1}),
     ],
     maximum_game_minutes=2.0,
     full_vision=True,

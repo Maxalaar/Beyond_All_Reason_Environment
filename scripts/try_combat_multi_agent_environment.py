@@ -70,7 +70,7 @@ def main() -> None:
             "victory"
             if info.get("enemies_alive", 1) == 0
             else "defeat"
-            if info.get("agents_alive", 1) == 0
+            if info.get("allies_alive", 1) == 0
             else "timeout"
         )
         print(

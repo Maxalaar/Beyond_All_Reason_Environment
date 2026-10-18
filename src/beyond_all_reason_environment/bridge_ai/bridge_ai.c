@@ -1,12 +1,13 @@
 /* BridgeAI: Reinforcement Learning Bridge for the Spring/Recoil engine.
  *
- * Runs as a Skirmish AI on team 0 (the agent side). Every decision_interval frames,
- * it collects observations from all units (own + visible enemies), sends them to Python
- * over a TCP socket (blocking), receives actions, and gives orders directly via the
- * engine callback — no server-lead delay, exact gymnasium loop.
+ * Runs as a Skirmish AI on the first agent team; the other agent teams, if any (self-play), run NullAI.
+ * Every decision_interval frames, it collects the state of every unit (its alliance's and the enemies',
+ * all visible with full vision), sends it to Python over a TCP socket (blocking), receives the orders of
+ * every agent and passes them on — no server-lead delay, exact gymnasium loop.
  *
- * For episode resets, it calls the synced gadget (reinforcement_learning_scenario.lua)
- * via COMMAND_CALL_LUA_RULES which invokes gadget:RecvSkirmishAIMessage synchronously.
+ * A Skirmish AI can only order its own team's units, so resets, orders and the current order of each
+ * unit all go through the synced gadget (reinforcement_learning_scenario.lua), via COMMAND_CALL_LUA_RULES
+ * which invokes gadget:RecvSkirmishAIMessage synchronously, in the same frame.
  *
  * AI options (from [AIOPTIONS] in the start script):
  *   port              TCP port Python is listening on
@@ -40,12 +41,6 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-/* Spring CMD constants (from Sim/Unit/CommandAI/Command.h) */
-#define CMD_STOP   0
-#define CMD_ATTACK 2
-#define CMD_MOVE   10
-#define CMD_FIGHT  16
-
 #define SQUARE_SIZE       8
 #define FIRST_FRAME       30   /* wait for game setup before contacting Python */
 #define MAX_UNITS         512
@@ -77,9 +72,6 @@ static float map_z = 1.0f;
 static int map_width_sq  = 128;  /* map width in squares (8 elmos each) */
 static int map_height_sq = 128;
 
-/* LoS map mip level: LoS grid is (map_width_sq >> los_mip_level) x (map_height_sq >> los_mip_level). */
-static int los_mip_level = 1;
-
 /* Number of BAR armor types, queried from the engine in EVENT_INIT (STATIC API). */
 static int num_armor_types = 15;
 
@@ -97,6 +89,9 @@ static int pending_reset_obs   = 0;
 
 /* Unit IDs returned by the gadget after reset (comma-separated) */
 static char spawned_units[4096] = "";
+
+/* Current order of every unit, from the gadget: "<unit>,<command>,<x>,<z>;..." */
+static char commands[OBS_BUF];
 
 /* Observation write buffer */
 static char obs[OBS_BUF];
@@ -237,16 +232,6 @@ static int tcp_recv(void) {
 
 /* ---- Unit helpers -------------------------------------------------------- */
 
-static const char *command_name(int cmd_id) {
-    switch (cmd_id) {
-        case CMD_MOVE:   return "move";
-        case CMD_FIGHT:  return "fight";
-        case CMD_ATTACK: return "attack";
-        case CMD_STOP:   return "stop";
-        default:         return "other";
-    }
-}
-
 /* Append one unit's JSON object to obs[]. */
 static void append_unit(int uid, int team_id) {
     float pos[3] = {0};
@@ -258,47 +243,47 @@ static void append_unit(int uid, int team_id) {
     float max_hp  = (def_id >= 0) ? cb->UnitDef_getHealth(ai_id, def_id) : 0.0f;
     const char *uname = (def_id >= 0) ? cb->UnitDef_getName(ai_id, def_id) : "unknown";
 
-    /* Current command */
-    int n_cmds = cb->Unit_getCurrentCommands(ai_id, uid);
-    const char *cmd_str = "none";
-    float tgt_x = 0.0f, tgt_z = 0.0f;
-    int has_target = 0;
-    if (n_cmds > 0) {
-        int cmd_id = cb->Unit_CurrentCommand_getId(ai_id, uid, 0);
-        cmd_str = command_name(cmd_id);
-        float params[10];
-        int np = cb->Unit_CurrentCommand_getParams(ai_id, uid, 0, params, 10);
-        if (np == 1) {
-            /* Unit target (e.g. attack) */
-            int tgt_uid = (int)params[0];
-            float tpos[3] = {0};
-            cb->Unit_getPos(ai_id, tgt_uid, tpos);
-            tgt_x = tpos[0] / map_x;
-            tgt_z = tpos[2] / map_z;
-            has_target = 1;
-        } else if (np >= 3) {
-            tgt_x = params[0] / map_x;
-            tgt_z = params[2] / map_z;
-            has_target = 1;
-        }
-    }
-
     obs_printf(
         "{\"id\":%d,\"team\":%d,\"unit\":\"%s\","
         "\"x\":%.6f,\"z\":%.6f,"
         "\"velocity_x\":%.6f,\"velocity_z\":%.6f,"
-        "\"health\":%.2f,\"maximum_health\":%.2f,"
-        "\"command\":\"%s\",",
+        "\"health\":%.2f,\"maximum_health\":%.2f}",
         uid, team_id, uname,
         pos[0] / map_x, pos[2] / map_z,
         vel[0],         vel[2],
-        health, max_hp,
-        cmd_str
+        health, max_hp
     );
-    if (has_target)
-        obs_printf("\"target_x\":%.6f,\"target_z\":%.6f}", tgt_x, tgt_z);
-    else
-        obs_str("\"target_x\":null,\"target_z\":null}");
+}
+
+/* Ask the gadget for a request's answer: "rl_<request>|<argument>", the answer written to response. */
+static void call_gadget(const char *message, char *response) {
+    memset(response, 0, MAX_RESPONSE_SIZE);
+    struct SCallLuaRulesCommand lcmd = { message, -1, response };
+    cb->Engine_handleCommand(ai_id, COMMAND_TO_ID_ENGINE, -1, COMMAND_CALL_LUA_RULES, &lcmd);
+}
+
+/* Fill commands[] with the current order of every unit, asking the gadget in chunks ("<next>|<entries>"). */
+static void read_commands(void) {
+    char message[64];
+    char response[MAX_RESPONSE_SIZE];
+    int length = 0;
+    int next = 0;
+    commands[0] = '\0';
+    while (next >= 0) {
+        snprintf(message, sizeof(message), "rl_commands|%d", next);
+        call_gadget(message, response);
+        char *entries = strchr(response, '|');
+        next = atoi(response);
+        if (!entries) break;
+        entries++;
+        int n = (int)strlen(entries);
+        if (n > 0 && length + n + 2 < (int)sizeof(commands)) {
+            if (length > 0) commands[length++] = ';';
+            memcpy(commands + length, entries, n);
+            length += n;
+            commands[length] = '\0';
+        }
+    }
 }
 
 /* Append unit_types dict entry for a given def_id / name, including per-weapon data. */
@@ -411,10 +396,10 @@ static void send_terrain(void) {
 /* ---- Observation --------------------------------------------------------- */
 
 static void send_observation(int frame, int frames_since_prev) {
-    /* Collect all units */
+    /* Collect all units: this alliance's (own team included) and the enemies' */
     int own_ids[MAX_UNITS],   n_own   = 0;
     int enemy_ids[MAX_UNITS], n_enemy = 0;
-    n_own   = cb->getTeamUnits(ai_id, own_ids,   MAX_UNITS);
+    n_own   = cb->getFriendlyUnits(ai_id, own_ids,   MAX_UNITS);
     n_enemy = cb->getEnemyUnits(ai_id, enemy_ids, MAX_UNITS);
     if (n_own   < 0) n_own   = 0;
     if (n_enemy < 0) n_enemy = 0;
@@ -431,7 +416,7 @@ static void send_observation(int frame, int frames_since_prev) {
     );
     spawned_units[0] = '\0'; /* clear after first observation */
 
-    /* Own units first, then enemies */
+    /* Allied units first, then enemies */
     for (int i = 0; i < n_own; i++) {
         if (i > 0) obs_str(",");
         int team_id = cb->Unit_getTeam(ai_id, own_ids[i]);
@@ -468,112 +453,24 @@ static void send_observation(int frame, int frames_since_prev) {
             }
         }
     }
-    /* Visibility channel: one value per terrain cell, 1 = in LoS, 0 = not. */
-    obs_str("},\"visibility\":[");
-    int los_w = map_width_sq  >> los_mip_level;
-    int los_h = map_height_sq >> los_mip_level;
-    if (los_w < 1) los_w = 1;
-    if (los_h < 1) los_h = 1;
-    int *los_map = (int *)malloc(los_w * los_h * sizeof(int));
-    if (los_map) {
-        memset(los_map, 0, los_w * los_h * sizeof(int));
-        cb->Map_getLosMap(ai_id, los_map, los_w * los_h);
-        for (int j = 0; j < terrain_h; j++) {
-            for (int i = 0; i < terrain_w; i++) {
-                int sq_x = (int)((i + 0.5f) * (float)map_width_sq  / (float)terrain_w);
-                int sq_z = (int)((j + 0.5f) * (float)map_height_sq / (float)terrain_h);
-                int lx = sq_x >> los_mip_level;
-                int lz = sq_z >> los_mip_level;
-                if (lx >= los_w) lx = los_w - 1;
-                if (lz >= los_h) lz = los_h - 1;
-                int last = (j == terrain_h - 1 && i == terrain_w - 1);
-                obs_str(los_map[lz * los_w + lx] > 0 ? "1" : "0");
-                if (!last) obs_str(",");
-            }
-        }
-        free(los_map);
-    } else {
-        int n = terrain_w * terrain_h;
-        for (int k = 0; k < n; k++) {
-            obs_str(k < n - 1 ? "1," : "1");
-        }
-    }
-    obs_str("]}");
+    /* Current orders, from the gadget */
+    read_commands();
+    obs_str("},\"commands\":\"");
+    obs_str(commands);
+    obs_str("\"}");
     tcp_send();
 }
 
 /* ---- Actions ------------------------------------------------------------- */
 
 static void apply_actions(void) {
-    const char *arr = jarray_start(line, "actions");
-    if (!arr) return;
-    const char *p = arr;
-    while (*p && *p != ']') {
-        /* Skip to next object */
-        while (*p && *p != '{' && *p != ']') p++;
-        if (*p != '{') break;
-        const char *obj_start = p;
-        const char *obj_end   = skip_object(p);
-        /* Temporarily null-terminate the object for parsing */
-        char obj[512];
-        int obj_len = (int)(obj_end - obj_start);
-        if (obj_len >= (int)sizeof(obj)) { p = obj_end; continue; }
-        memcpy(obj, obj_start, obj_len);
-        obj[obj_len] = '\0';
-
-        int uid = jint(obj, "unit", -1);
-        char cmd[32] = "continue";
-        jstr(obj, "command", cmd, sizeof(cmd));
-        float tx = 0.0f, tz = 0.0f;
-        const char *px = jfind(obj, "x");
-        const char *pz = jfind(obj, "z");
-        if (px) tx = (float)atof(strchr(px, ':') + 1);
-        if (pz) tz = (float)atof(strchr(pz, ':') + 1);
-        if (tx < 0.0f) tx = 0.0f; if (tx > 1.0f) tx = 1.0f;
-        if (tz < 0.0f) tz = 0.0f; if (tz > 1.0f) tz = 1.0f;
-
-        float wx = tx * map_x;
-        float wz = tz * map_z;
-        float ground_y = cb->Map_getElevationAt(ai_id, wx, wz);
-        float wpos[3] = { wx, ground_y, wz };
-
-        if (uid >= 0 && strcmp(cmd, "continue") != 0) {
-            if (strcmp(cmd, "stop") == 0) {
-                struct SStopUnitCommand scmd = { uid, -1, 0, INT_MAX };
-                cb->Engine_handleCommand(ai_id, COMMAND_TO_ID_ENGINE, -1,
-                                         COMMAND_UNIT_STOP, &scmd);
-            } else if (strcmp(cmd, "move") == 0) {
-                struct SMoveUnitCommand scmd = { uid, -1, 0, INT_MAX, wpos };
-                cb->Engine_handleCommand(ai_id, COMMAND_TO_ID_ENGINE, -1,
-                                         COMMAND_UNIT_MOVE, &scmd);
-            } else if (strcmp(cmd, "fight") == 0) {
-                struct SFightUnitCommand scmd = { uid, -1, 0, INT_MAX, wpos };
-                cb->Engine_handleCommand(ai_id, COMMAND_TO_ID_ENGINE, -1,
-                                         COMMAND_UNIT_FIGHT, &scmd);
-            } else if (strcmp(cmd, "attack") == 0) {
-                /* Snap to nearest enemy within snap_radius */
-                int nearby[MAX_UNITS];
-                int n = cb->getEnemyUnitsIn(ai_id, wpos, snap_radius, 0, nearby, MAX_UNITS);
-                if (n > 0) {
-                    int best = -1;
-                    float best_d = 1e30f;
-                    for (int i = 0; i < n; i++) {
-                        float ep[3] = {0};
-                        cb->Unit_getPos(ai_id, nearby[i], ep);
-                        float dx = ep[0] - wx, dz = ep[2] - wz;
-                        float d  = dx * dx + dz * dz;
-                        if (d < best_d) { best_d = d; best = nearby[i]; }
-                    }
-                    if (best >= 0) {
-                        struct SAttackUnitCommand scmd = { uid, -1, 0, INT_MAX, best };
-                        cb->Engine_handleCommand(ai_id, COMMAND_TO_ID_ENGINE, -1,
-                                                 COMMAND_UNIT_ATTACK, &scmd);
-                    }
-                }
-            }
-        }
-        p = obj_end;
-    }
+    /* {"type":"actions","orders":"<unit>,<command>,<x>,<z>;..."}: the gadget gives every order. */
+    static char orders[LINE_BUF];
+    static char message[LINE_BUF + 64];
+    char response[MAX_RESPONSE_SIZE];
+    if (!jstr(line, "orders", orders, sizeof(orders)) || orders[0] == '\0') return;
+    snprintf(message, sizeof(message), "rl_actions|%g|%s", snap_radius, orders);
+    call_gadget(message, response);
 }
 
 /* ---- Reset --------------------------------------------------------------- */
@@ -630,10 +527,7 @@ static void call_gadget_reset(const char *reset_json) {
     snprintf(msg, sizeof(msg), "rl_reset|%d|%s|%s", ep, spawns_str, states_str);
 
     char response[MAX_RESPONSE_SIZE];
-    memset(response, 0, sizeof(response));
-    struct SCallLuaRulesCommand lcmd = { msg, -1, response };
-    cb->Engine_handleCommand(ai_id, COMMAND_TO_ID_ENGINE, -1,
-                             COMMAND_CALL_LUA_RULES, &lcmd);
+    call_gadget(msg, response);
 
     /* Response is the comma-separated list of spawned unit IDs */
     strncpy(spawned_units, response, sizeof(spawned_units) - 1);
@@ -667,8 +561,6 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
         map_height_sq = cb->Map_getHeight(ai_id);
         map_x = (float)(map_width_sq  * SQUARE_SIZE);
         map_z = (float)(map_height_sq * SQUARE_SIZE);
-        int mip = cb->Mod_getLosMipLevel(ai_id);
-        if (mip > 0) los_mip_level = mip;
 
         /* Armor type count is a static global property of the game. */
         int n_armor = cb->WeaponDef_getNumDamageTypes(ai_id);

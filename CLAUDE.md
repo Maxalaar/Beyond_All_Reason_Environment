@@ -68,11 +68,11 @@ so the environment must match its interface (to confirm).
   game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_combat_environment.py,
   tests/test_combat_environment.py (`pytest -m engine` for the end-to-end test).
 - Configuration layout (agreed 2026-10-18): one scenario type for everything (scenario.py, ScenarioConfiguration:
-  map, time limit, allyteams = player + optional placed units + behaviour), no "combat" vs "match" split.
+  map, time limit, teams = TeamConfiguration(controller, side, units, allyteam)), no "combat" vs "match" split.
   CombatConfiguration = scenario + observation + action + rewards + engine; BatchConfiguration = scenario + series
   parameters (matches, parallel, seeds, replays). Scenarios (scenarios/<name>.py, variable named like the file)
   define only the scenario; the experiment (training configuration in Maxalaar_Reinforcement_Learning,
-  configurations/beyond_all_reason/) chooses observation, action and rewards. Each allyteam has a controller
+  configurations/beyond_all_reason/) chooses observation, action and rewards. Each team has a controller
   (controllers.py, agreed 2026-10-18: DoNothing, Passive, HoldAndFire, AttackNearest, BuiltInArtificialIntelligence,
   Agent) and a side; a controller gives the engine AI (NullAI for scripted ones), the placed units' states and an
   optional gadget script (mod option reinforcement_learning_controllers, "team,script,params/..."; SCRIPTS table in
@@ -80,7 +80,18 @@ so the environment must match its interface (to confirm).
   controller (a Python policy or a trained checkpoint through a BridgeAI, for the evaluation league).
   ArtificialIntelligencePlayer.label/display_name names players in charts and tables. Observation counts left to None follow
   the scenario. Armor types are the constant NUMBER_OF_ARMOR_TYPES (checked against the engine at start).
-  Match series live in configurations/matches/.
+  Match series live in configurations/matches/ (one team per alliance: statistics count players as sides).
+- Teams and alliances (agreed 2026-10-18): TeamConfiguration.allyteam groups teams (None = alone);
+  ScenarioConfiguration.allyteams numbers them 0.. in order of appearance. Agents are the teams with Agent(), on any
+  team and on several (self-play); agents are named team<t>_unit_<k>. One BridgeAI (first agent team) talks to
+  Python for all agent teams; the others run NullAI. A Skirmish AI can only order its own team, so every agent order
+  goes through the gadget ("rl_actions|snap|unit,cmd,x,z;...", attack snaps to the nearest enemy of the unit's
+  alliance), and current orders too ("rl_commands|<first>", chunked: responses are capped at MAX_RESPONSE_SIZE
+  10240). The BridgeAI lists getFriendlyUnits + getEnemyUnits. Observations, rewards and info are per alliance and
+  relative (alliance 0 = the observer's), enemy orders hidden; the visibility channel is computed in Python per
+  alliance from sight ranges (the engine LOS map exists only for the BridgeAI's alliance). The reset observation
+  still lists the units the reset destroyed (commanders, previous episode) for one frame: CombatEnvironment keeps
+  only the spawned ones (before 2026-10-18 the initial health, hence the reward scale, counted the commanders).
 - Placed units in a match (no Python): the gadget reads mod option reinforcement_learning_scenario
   ("team,unit,x,z/...|states", "/" because ";" ends a start-script value) at frame 1, spawns the units, then removes
   the commanders (spawn first, so game_end never sees an empty team); deathmode=killall. editor_sandbox=1 would skip

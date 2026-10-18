@@ -4,13 +4,13 @@ Normal start (commander and economy); start positions are drawn at random from t
 """
 
 from ..controllers import BuiltInArtificialIntelligence
-from ..scenario import AllyteamConfiguration, ScenarioConfiguration
+from ..scenario import ScenarioConfiguration, TeamConfiguration
 
 armada_versus_cortex = ScenarioConfiguration(
     map_name="Red Comet Remake 1.8",
-    allyteams=[
-        AllyteamConfiguration(controller=BuiltInArtificialIntelligence("BARb", version="stable"), side="Armada"),
-        AllyteamConfiguration(controller=BuiltInArtificialIntelligence("BARb", version="stable"), side="Cortex"),
+    teams=[
+        TeamConfiguration(controller=BuiltInArtificialIntelligence("BARb", version="stable"), side="Armada"),
+        TeamConfiguration(controller=BuiltInArtificialIntelligence("BARb", version="stable"), side="Cortex"),
     ],
     maximum_game_minutes=60,
 )

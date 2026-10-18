@@ -7,13 +7,13 @@ from pathlib import Path
 import pytest
 
 from beyond_all_reason_environment import (
-    AllyteamConfiguration,
     ArtificialIntelligencePlayer,
     AttackNearest,
     BatchConfiguration,
     BuiltInArtificialIntelligence,
     MatchConfiguration,
     ScenarioConfiguration,
+    TeamConfiguration,
 )
 from beyond_all_reason_environment.batch import (
     DEFAULT_CONFIGURATION_FILE,
@@ -35,7 +35,7 @@ TWO_SIDES = ["Armada", "Cortex"]
 def scenario(sides: list = TWO_SIDES, **fields) -> ScenarioConfiguration:
     """BARb with a normal start (commander) for each side."""
     return ScenarioConfiguration(
-        allyteams=[AllyteamConfiguration(BuiltInArtificialIntelligence("BARb"), side=side) for side in sides], **fields
+        teams=[TeamConfiguration(BuiltInArtificialIntelligence("BARb"), side=side) for side in sides], **fields
     )
 
 
@@ -80,6 +80,17 @@ def test_unknown_side_is_rejected():
         lambda: BatchConfiguration(name="test", scenario=scenario(), parallel=0),
         # Nobody would play the agent without Python.
         lambda: BatchConfiguration(name="test", scenario=one_versus_one),
+        # Match statistics count one team per alliance.
+        lambda: BatchConfiguration(
+            name="test",
+            scenario=ScenarioConfiguration(
+                teams=[
+                    TeamConfiguration(BuiltInArtificialIntelligence("BARb"), allyteam=0),
+                    TeamConfiguration(BuiltInArtificialIntelligence("BARb"), allyteam=0),
+                    TeamConfiguration(BuiltInArtificialIntelligence("BARb")),
+                ]
+            ),
+        ),
     ],
 )
 def test_invalid_batch_configuration_is_rejected(build):
@@ -90,9 +101,9 @@ def test_invalid_batch_configuration_is_rejected(build):
 def test_placed_units_and_commanders_do_not_mix():
     with pytest.raises(ValueError, match="placed units"):
         ScenarioConfiguration(
-            allyteams=[
-                AllyteamConfiguration(AttackNearest(), units={"armpw": 1}),
-                AllyteamConfiguration(AttackNearest()),
+            teams=[
+                TeamConfiguration(AttackNearest(), units={"armpw": 1}),
+                TeamConfiguration(AttackNearest()),
             ],
         )
 

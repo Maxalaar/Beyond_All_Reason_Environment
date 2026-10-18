@@ -19,16 +19,25 @@ from beyond_all_reason_environment.combat_environment import (
     CombatEnvironment,
     chassis_feature_names,
     encode_observation,
+    merge_commands,
+    relative_allyteams,
     state_feature_names,
     team_reward,
+    visibility,
     weapon_feature_names,
 )
-from beyond_all_reason_environment.controllers import Agent, AttackNearest, BuiltInArtificialIntelligence, DoNothing
+from beyond_all_reason_environment.controllers import (
+    Agent,
+    AttackNearest,
+    BuiltInArtificialIntelligence,
+    DoNothing,
+    Passive,
+)
 from beyond_all_reason_environment.game_extension import extension_game_name, write_game_extension
 from beyond_all_reason_environment.installation import GAME_VERSION
 from beyond_all_reason_environment.scenario import (
-    AllyteamConfiguration,
     ScenarioConfiguration,
+    TeamConfiguration,
     controller_mod_options,
     spawn_positions,
     unit_states,
@@ -166,18 +175,18 @@ def test_team_reward_counts_damage_kills_and_victory():
     damaged = raw_observation([unit(1, 0, 0.4, 0.5, 300.0), unit(2, 1, 0.6, 0.5, 185.0), unit(3, 1, 0.6, 0.6)])
     won = raw_observation([unit(1, 0, 0.4, 0.5, 300.0)])
 
-    reward = team_reward(before, damaged, 740.0, 370.0, 2, configuration)
+    reward = team_reward(before, damaged, 740.0, 370.0, 2, configuration, ally_teams={0})
     assert reward == pytest.approx(185 / 740 - 70 / 370)
 
-    final = team_reward(damaged, won, 740.0, 370.0, 2, configuration)
+    final = team_reward(damaged, won, 740.0, 370.0, 2, configuration, ally_teams={0})
     assert final == pytest.approx((185 + 370) / 740 + 0.5 * 2 / 2 + 1.0)
 
 
 def test_spawns_put_agents_first_facing_the_opponent():
     scenario = ScenarioConfiguration(
-        allyteams=[
-            AllyteamConfiguration(controller=Agent(), units={"armpw": 3}),
-            AllyteamConfiguration(controller=DoNothing(), units={"corak": 2}),
+        teams=[
+            TeamConfiguration(controller=Agent(), units={"armpw": 3}),
+            TeamConfiguration(controller=DoNothing(), units={"corak": 2}),
         ]
     )
     spawns = spawn_positions(scenario, np.random.default_rng(0))
@@ -198,7 +207,7 @@ def test_controllers_give_states_scripts_and_players():
     assert unit_states(scenario, (2, 1)) == [2, 1, 2, 1]
     assert controller_mod_options(scenario) == {"reinforcement_learning_controllers": "1,attack_nearest,15"}
     assert controller_mod_options(one_versus_one) == {}
-    players = [allyteam.player() for allyteam in scenario.allyteams]
+    players = scenario.players
     assert [(player.short_name, player.display_name) for player in players] == [
         ("BridgeAI", "Agent"),
         ("NullAI", "AttackNearest"),
@@ -206,11 +215,72 @@ def test_controllers_give_states_scripts_and_players():
     assert BuiltInArtificialIntelligence("BARb").player("Cortex").display_name == "BARb"
 
 
-def test_the_agents_must_play_allyteam_zero_only():
-    with pytest.raises(ValueError, match="allyteam 0"):
+def test_the_environment_needs_a_team_of_agents():
+    with pytest.raises(ValueError, match="played by the agents"):
         CombatConfiguration(scenario=one_versus_one.with_controller(0, AttackNearest()))
-    with pytest.raises(ValueError, match="allyteam 0"):
-        CombatConfiguration(scenario=one_versus_one.with_controller(1, Agent()))
+    # The agents may play any team.
+    CombatConfiguration(scenario=one_versus_one.with_controller(0, Passive()).with_controller(1, Agent()))
+
+
+def test_every_agent_sees_its_own_alliance_as_zero_and_enemy_orders_hidden():
+    configuration = CombatConfiguration(scenario=one_versus_one.with_controller(1, Agent()))
+    state_names = state_feature_names()
+    raw = raw_observation([unit(1, 0, 0.4, 0.5, command="move"), unit(2, 1, 0.6, 0.5, command="attack")])
+    for observer, enemy_command in ((1, "attack"), (2, "move")):
+        observation = encode_observation(raw, observer, "armpw", configuration, MAP_SIZE)
+        enemy = observation["enemy_units_state"][0]
+        assert observation["enemy_unit_mask"][0] == 1.0
+        assert enemy[state_names.index("allyteam_id_normalized")] == pytest.approx(1.0)
+        assert enemy[state_names.index("command_none")] == 1.0
+        assert enemy[state_names.index(f"command_{enemy_command}")] == 0.0
+        assert observation["self_state"][state_names.index("allyteam_id_normalized")] == 0.0
+    assert relative_allyteams([0, 1, 1, 2], 1) == {1: 0, 0: 1, 2: 2}
+
+
+def test_allied_teams_share_an_alliance_and_its_reward():
+    scenario = ScenarioConfiguration(
+        teams=[
+            TeamConfiguration(Agent(), units={"armpw": 1}, allyteam=0),
+            TeamConfiguration(AttackNearest(), units={"armpw": 1}, allyteam=0),
+            TeamConfiguration(DoNothing(), units={"armpw": 2}),
+        ],
+        full_vision=True,
+    )
+    assert (scenario.allyteams, scenario.number_of_allyteams, scenario.units_per_allyteam()) == ([0, 0, 1], 2, [2, 2])
+    observation = CombatConfiguration(scenario=scenario).observation
+    assert (observation.maximum_ally_units, observation.maximum_enemy_units) == (1, 2)
+    spawns = spawn_positions(scenario, np.random.default_rng(0))
+    assert [spawn["team"] for spawn in spawns] == [0, 1, 2, 2]
+    # Both teams of alliance 0 spawn on the same side, apart along z.
+    assert spawns[0]["x"] == pytest.approx(spawns[1]["x"], abs=0.05) and spawns[0]["z"] != spawns[1]["z"]
+    before = raw_observation([unit(1, 0, 0.4, 0.5), unit(2, 1, 0.4, 0.6), unit(3, 2, 0.6, 0.5)])
+    after = raw_observation([unit(1, 0, 0.4, 0.5), unit(2, 1, 0.4, 0.6, 185.0)])
+    configuration = CombatConfiguration(scenario=scenario)
+    reward = team_reward(before, after, 370.0, 740.0, 1, configuration, ally_teams={0, 1})
+    assert reward == pytest.approx(370 / 370 - 185 / 740 + 0.5 + 1.0)
+
+
+def test_self_play_gives_one_agent_per_unit_of_each_agent_team():
+    environment = CombatEnvironment(CombatConfiguration(scenario=five_versus_five.with_controller(1, Agent())))
+    assert environment.possible_agents[:2] == ["team0_unit_0", "team0_unit_1"]
+    assert environment.possible_agents[5:7] == ["team1_unit_0", "team1_unit_1"]
+    players = environment._players(port=1234)
+    # The BridgeAI talks to Python for both agent teams; the second one runs NullAI, the gadget gives its orders.
+    assert [(player.short_name, player.display_name) for player in players] == [
+        ("BridgeAI", "Agent"),
+        ("NullAI", "Agent"),
+    ]
+
+
+def test_orders_and_visibility_come_from_the_raw_observation():
+    raw = {"units": [unit(1, 0, 0.5, 0.5), unit(2, 1, 0.9, 0.5)], "commands": "1,move,0.250000,0.750000;2,none,,"}
+    merge_commands(raw)
+    assert (raw["units"][0]["command"], raw["units"][0]["target_x"]) == ("move", 0.25)
+    assert (raw["units"][1]["command"], raw["units"][1]["target_x"]) == ("none", None)
+    raw["unit_types"] = {"armpw": {"sight": 1000.0}}
+    grid = visibility(raw, {0}, (4000.0, 4000.0), (4, 4))
+    # Sight 1000 around (2000, 2000): the four central cells, not the corners.
+    assert grid[1:3, 1:3].all() and not grid[0, 0] and not grid[3, 3]
 
 
 def test_observation_counts_left_unset_follow_the_scenario():

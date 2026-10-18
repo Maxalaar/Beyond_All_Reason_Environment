@@ -13,7 +13,7 @@ from .controllers import (
     Passive,
 )
 from .match import MatchResult, run_match
-from .scenario import AllyteamConfiguration, ScenarioConfiguration
+from .scenario import ScenarioConfiguration, TeamConfiguration
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
 
 
@@ -24,7 +24,7 @@ def results_browser_path() -> Path:
 
 __all__ = [
     "Agent",
-    "AllyteamConfiguration",
+    "TeamConfiguration",
     "ArtificialIntelligencePlayer",
     "AttackNearest",
     "BuiltInArtificialIntelligence",

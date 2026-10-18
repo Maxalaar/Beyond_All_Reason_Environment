@@ -8,6 +8,7 @@ Examples:
     python scripts/try_combat_environment.py --policy attack --episodes 5
     python scripts/try_combat_environment.py --policy random --opponent HoldAndFire
     python scripts/try_combat_environment.py --scenario one_versus_one --opponent AttackNearest
+    python scripts/try_combat_environment.py --opponent Agent   # self-play: the policy plays both sides
     python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
     python scripts/try_combat_environment.py --scenario one_versus_one --graphical --speed 2
 """
@@ -17,13 +18,16 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment import AttackNearest, DoNothing, HoldAndFire, Passive, scenarios
+from beyond_all_reason_environment import Agent, AttackNearest, DoNothing, HoldAndFire, Passive, scenarios
 from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
 from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
 from beyond_all_reason_environment.engine_configuration import EngineConfiguration
 
 ATTACK = COMMANDS.index("attack")
-OPPONENTS = {controller.label: controller for controller in (DoNothing(), Passive(), HoldAndFire(), AttackNearest())}
+# Agent: the opponents are agents too, playing the same policy (self-play).
+OPPONENTS = {
+    controller.label: controller for controller in (DoNothing(), Passive(), HoldAndFire(), AttackNearest(), Agent())
+}
 
 
 def random_action(observation: dict, random: np.random.Generator) -> dict:
@@ -55,8 +59,9 @@ def main() -> None:
     arguments = parser.parse_args()
 
     scenario = getattr(scenarios, arguments.scenario)
-    for index in range(1, len(scenario.allyteams)):
-        scenario = scenario.with_controller(index, OPPONENTS[arguments.opponent])
+    for index in range(len(scenario.teams)):
+        if index not in scenario.agent_teams:
+            scenario = scenario.with_controller(index, OPPONENTS[arguments.opponent])
     configuration = CombatConfiguration(
         scenario=scenario,
         engine=EngineConfiguration(
@@ -70,6 +75,8 @@ def main() -> None:
     random = np.random.default_rng(arguments.seed)
     start = time.monotonic()
     with CombatEnvironment(configuration) as environment:
+        # Reward and information of the first agent team (with self-play, the other side's are the opposite).
+        followed = environment.possible_agents[0].split("_unit_")[0] + "_unit_"
         steps = 0
         for episode in range(arguments.episodes):
             observations, informations = environment.reset(seed=arguments.seed + episode)
@@ -84,13 +91,13 @@ def main() -> None:
                     for agent in environment.agents
                 }
                 observations, rewards, terminations, truncations, informations = environment.step(actions)
-                total_reward += next(iter(rewards.values()))
+                total_reward += next((r for agent, r in rewards.items() if agent.startswith(followed)), 0.0)
                 length += 1
                 steps += 1
-            information = next(iter(informations.values()))
+            information = next(i for agent, i in informations.items() if agent.startswith(followed))
             print(
                 f"episode {episode}: {length} steps, {information['episode_frame'] / 30:.1f} game seconds, "
-                f"team reward {total_reward:+.2f}, agents alive {information['agents_alive']}, "
+                f"team reward {total_reward:+.2f}, allies alive {information['allies_alive']}, "
                 f"enemies alive {information['enemies_alive']}, late actions {information['late_actions']}, "
                 f"maximum lead {information['maximum_lead_frames']} frames"
             )

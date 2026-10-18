@@ -2,8 +2,9 @@
 
 A CombatConfiguration is made of separate parts, each answering one question:
 
-    scenario     ScenarioConfiguration    what happens in the game: map, allyteams and who plays them, placed units,
-                                          start positions, episode length (scenario.py, shared with the matches)
+    scenario     ScenarioConfiguration    what happens in the game: map, teams, alliances and who plays them,
+                                          placed units, start positions, episode length (scenario.py, shared with
+                                          the matches)
     observation  ObservationConfiguration what each agent sees
     action       ActionConfiguration      what each agent can do, and how often it decides
     rewards      RewardWeights            how the agents are rewarded
@@ -15,7 +16,7 @@ configuration) chooses the scenario and the other parts.
 
 from dataclasses import dataclass, field, replace
 
-from .controllers import FIRE_AT_WILL, MANOEUVRE, Agent
+from .controllers import FIRE_AT_WILL, MANOEUVRE
 from .engine_configuration import EngineConfiguration
 from .scenario import ScenarioConfiguration
 from .scenarios.five_versus_five import five_versus_five
@@ -32,19 +33,20 @@ class ObservationConfiguration:
     A count left to None takes every unit the scenario can have in that list (resolved by CombatConfiguration).
     """
 
-    # Actor observation: allies and enemies of all opponent allyteams combined.
+    # Actor observation: units of the agent's alliance (other than its own), and of all enemy alliances combined.
     maximum_ally_units: int | None = None
     maximum_enemy_units: int | None = None
     maximum_ally_buildings: int = 0
     maximum_enemy_buildings: int = 0
     # Weapon slots per entity (up to this many weapon tokens, padded).
     maximum_weapons_per_unit: int = 4
-    # Critic observation: per-enemy-allyteam budgets (distinct from the combined actor budgets above).
+    # Critic observation: budgets per enemy alliance (distinct from the combined actor budgets above).
     maximum_units_per_enemy_allyteam: int | None = None
     maximum_buildings_per_enemy_allyteam: int = 0
     # Terrain observation: the map resampled to this fixed (width, height) grid.
-    # Channels: normalised height, slope in [0,1), water mask, LoS visibility (1=visible, 0=fog).
-    # The first three are constant within an episode; visibility is updated every decision step.
+    # Channels: normalised height, slope in [0,1), water mask, and the visibility of the agent's alliance (1 where
+    # one of its units sees: within sight range, without terrain occlusion). The first three are constant within an
+    # episode; visibility is updated every decision step.
     terrain_resolution: tuple[int, int] = (64, 64)
 
     def __post_init__(self) -> None:
@@ -53,16 +55,18 @@ class ObservationConfiguration:
 
     def resolved(self, scenario: ScenarioConfiguration) -> "ObservationConfiguration":
         """A copy where every None count is replaced by the number of units the scenario can have there."""
-        unit_counts = [sum((at.units or {}).values()) for at in scenario.allyteams]
+        counts = scenario.units_per_allyteam()
+        # The largest list any agent can see: over the alliances that have agents.
+        agent_allyteams = {scenario.allyteams[team] for team in scenario.agent_teams}
 
         def chosen(value: int | None, default: int) -> int:
             return default if value is None else value
 
         return replace(
             self,
-            maximum_ally_units=chosen(self.maximum_ally_units, unit_counts[0] - 1),
-            maximum_enemy_units=chosen(self.maximum_enemy_units, sum(unit_counts[1:])),
-            maximum_units_per_enemy_allyteam=chosen(self.maximum_units_per_enemy_allyteam, max(unit_counts[1:])),
+            maximum_ally_units=chosen(self.maximum_ally_units, max(counts[a] for a in agent_allyteams) - 1),
+            maximum_enemy_units=chosen(self.maximum_enemy_units, max(sum(counts) - counts[a] for a in agent_allyteams)),
+            maximum_units_per_enemy_allyteam=chosen(self.maximum_units_per_enemy_allyteam, max(counts)),
         )
 
 
@@ -95,7 +99,8 @@ class ActionConfiguration:
 
 @dataclass
 class RewardWeights:
-    """Team reward of each step, shared by all agents. Damages are fractions of the total health of the side."""
+    """Reward of each step, shared by the agents of an alliance. Damages are fractions of the total health of the
+    side (the alliance, or all its enemies)."""
 
     damage_dealt: float = 1.0
     damage_received: float = 1.0
@@ -117,11 +122,10 @@ class CombatConfiguration:
 
     def __post_init__(self) -> None:
         scenario = self.scenario
-        controllers = [allyteam.controller for allyteam in scenario.allyteams]
-        if not isinstance(controllers[0], Agent) or any(isinstance(c, Agent) for c in controllers[1:]):
-            raise ValueError("the agents (controllers.Agent) play allyteam 0, and only it")
+        if not scenario.agent_teams:
+            raise ValueError("the combat environment needs at least one team played by the agents (controllers.Agent)")
         if not scenario.places_units:
-            raise ValueError("the combat environment needs placed units (allyteam units), not a normal start")
+            raise ValueError("the combat environment needs placed units (team units), not a normal start")
         if not isinstance(scenario.map_name, str):
             raise ValueError("the combat environment plays a single map, not a list")
         if not scenario.full_vision:
@@ -129,8 +133,8 @@ class CombatConfiguration:
                 "the combat environment needs scenario.full_vision: the engine drops attack orders on units the "
                 "team does not see"
             )
-        for allyteam in scenario.allyteams:
-            if not isinstance(allyteam.side, str):
-                raise ValueError(f"the combat environment needs one faction per allyteam, not {allyteam.side!r}")
+        for team in scenario.teams:
+            if not isinstance(team.side, str):
+                raise ValueError(f"the combat environment needs one faction per team, not {team.side!r}")
         # replace() makes a copy: an ObservationConfiguration shared by several configurations stays untouched.
         self.observation = self.observation.resolved(self.scenario)

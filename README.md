@@ -34,25 +34,27 @@ python scripts/browse_results.py                                    # web interf
 `run_matches.py` reads a Python file in `configurations/matches/` that defines
 `configuration = BatchConfiguration(...)`: the name of the run, the scenario, the number of matches, how many run
 in parallel, seeds, replays. The scenario (`ScenarioConfiguration`, predefined ones in
-`beyond_all_reason_environment.scenarios`) says what happens in each match: map, time limit, and the allyteams:
-for each, its controller, its faction (`side`) and how it starts: normally (a commander), or with placed units
-(`units`), as in the scenarios of the combat environment. The same scenario serves both.
+`beyond_all_reason_environment.scenarios`) says what happens in each match: map, time limit, and the teams
+(`TeamConfiguration`): for each, its controller, its faction (`side`), its alliance (`allyteam`: teams with the same
+number are allies; by default each team is alone) and how it starts: normally (a commander), or with placed units
+(`units`), as in the scenarios of the combat environment. The same scenario serves both. Match series count one
+team per alliance.
 
-| Controller (`controllers.py`) | The allyteam |
+| Controller (`controllers.py`) | The team |
 |---|---|
 | `DoNothing()` | its units keep their default states and receive no order |
 | `Passive()` | does not move, does not shoot |
 | `HoldAndFire()` | does not move, shoots what comes in range |
 | `AttackNearest(interval_seconds=1.0)` | every interval, each unit attacks the nearest enemy (scripted in the game extension's gadget, no Python) |
 | `BuiltInArtificialIntelligence("BARb")` | an artificial intelligence of the game |
-| `Agent()` | the agents of the combat environment, played from Python (allyteam 0 only) |
+| `Agent()` | the agents of the combat environment, played from Python (any number of teams: several for self-play) |
 
-A scenario made for the agents runs in matches once another controller plays their allyteam,
+A scenario made for the agents runs in matches once another controller plays their team,
 `one_versus_one.with_controller(0, AttackNearest())` (see `configurations/matches/one_versus_one_attack_nearest.py`).
 Charts and tables name each player after its controller. Each player keeps its color in every chart. Its `side` is
 one faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
 (reproducibly from the seed) and `summary.txt` gives its wins per faction. To compare factions, give
-the allyteams different factions; to compare controllers, give them different controllers.
+the teams different factions; to compare controllers, give them different controllers.
 `map_name` is one map or a list: matches then take the maps in turn, so each map gets the same number of
 matches (see `configurations/matches/factions_by_map_size.py`). Download maps first with
 `python scripts/download_game_data.py --map "<name>"`. Copy `barb_versus_barb.py` to start a new experiment;
@@ -104,22 +106,29 @@ about 5 GB of memory per match.
 
 ## Combat environment (reinforcement learning)
 
-`CombatEnvironment` is a fight between allyteams, one agent per unit of allyteam 0, with the parallel interface
+`CombatEnvironment` is a fight between alliances of teams, one agent (`team<t>_unit_<k>`) per unit of every team
+whose controller is `Agent()`, with the parallel interface
 of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces;
 `CombatMultiAgentEnvironment` wraps it for RLlib (`pip install -e ".[rllib]"`). Its `CombatConfiguration` is made
 of separate parts, each answering one question:
 
 | Part | Class | Question |
 |---|---|---|
-| `scenario` | `ScenarioConfiguration` | what happens in the game: map, allyteams (`Agent()` controls allyteam 0, any other controller the opponents), placed units, start positions, episode length; the same class as in matches |
+| `scenario` | `ScenarioConfiguration` | what happens in the game: map, teams and alliances (`Agent()` on the agents' teams, any other controller elsewhere, allies included), placed units, start positions, episode length; the same class as in matches |
 | `observation` | `ObservationConfiguration` | what each agent sees: entity counts (left to `None`, they follow the scenario), weapon slots, terrain grid |
 | `action` | `ActionConfiguration` | what each agent can do: commands per unit type, attack snap radius, decision interval |
 | `rewards` | `RewardWeights` | how the agents are rewarded |
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
 Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`,
-`armada_versus_cortex`) and only define the scenario part: an experiment, for example a training configuration of the reinforcement
-learning library, chooses the scenario and the other parts.
+`armada_versus_cortex`) and only define the scenario part: an experiment, for example a training configuration of
+the reinforcement learning library, chooses the scenario and the other parts. Self-play is a scenario with `Agent()`
+on both sides, for example `five_versus_five.with_controller(1, Agent())`.
+
+Every agent sees the game from its own alliance: allies are the units of its alliance, enemies those of the others
+(alliance numbers in the observation are relative, 0 for its own), the current orders of enemy units are hidden, the
+visibility channel of the terrain is its alliance's (sight ranges, without terrain occlusion), and the reward is its
+alliance's. An episode ends when one alliance at most still has units.
 
 ```python
 from beyond_all_reason_environment.combat_configuration import CombatConfiguration, RewardWeights
@@ -133,6 +142,7 @@ environment = CombatEnvironment(CombatConfiguration(scenario=one_versus_one, rew
 python scripts/try_combat_environment.py --policy attack --episodes 5            # check and measure speed
 python scripts/try_combat_environment.py --policy random --opponent HoldAndFire
 python scripts/try_combat_environment.py --scenario one_versus_one --opponent AttackNearest   # an opponent that attacks
+python scripts/try_combat_environment.py --opponent Agent   # self-play: the same policy plays both sides
 python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
 python scripts/try_combat_multi_agent_environment.py                              # through the RLlib wrapper
 ```

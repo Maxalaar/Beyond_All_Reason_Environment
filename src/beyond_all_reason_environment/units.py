@@ -5,9 +5,9 @@ Use for IDE autocomplete in scenario configurations::
     from beyond_all_reason_environment.units import units
 
     scenario = ScenarioConfiguration(
-        allyteams=[
-            AllyteamConfiguration(controller=Agent(), units={units.armada.bot.t1.pawn: 5}),
-            AllyteamConfiguration(controller=HoldAndFire(), side="Cortex", units={units.cortex.bot.t1.grunt: 5}),
+        teams=[
+            TeamConfiguration(controller=Agent(), units={units.armada.bot.t1.pawn: 5}),
+            TeamConfiguration(controller=HoldAndFire(), side="Cortex", units={units.cortex.bot.t1.grunt: 5}),
         ],
     )
 """

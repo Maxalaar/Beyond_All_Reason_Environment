@@ -56,9 +56,13 @@ class BatchConfiguration:
             raise ValueError(f"name {self.name!r} may only contain letters, digits, _ and -")
         if self.matches < 1 or self.parallel < 1:
             raise ValueError("matches and parallel must be at least 1")
+        if self.scenario.number_of_allyteams != len(self.scenario.teams):
+            raise ValueError(
+                "match statistics count one team per alliance: give each team an alliance of its own (allyteam=None)"
+            )
         if self.scenario.has_agents:
             raise ValueError(
-                "nobody plays the agents in a match without Python: give their allyteam another controller, "
+                "nobody plays the agents in a match without Python: give their team another controller, "
                 "scenario.with_controller(0, AttackNearest()) for example"
             )
 
@@ -76,10 +80,7 @@ class BatchConfiguration:
         maps = scenario.map_name
         uses_game_extension = scenario.uses_game_extension
         return MatchConfiguration(
-            players=[
-                allyteam.player(_draw_side(allyteam.side, seed, number))
-                for number, allyteam in enumerate(scenario.allyteams)
-            ],
+            players=[team.player(_draw_side(team.side, seed, number)) for number, team in enumerate(scenario.teams)],
             map_name=maps if isinstance(maps, str) else maps[index % len(maps)],
             flat_map_squares=scenario.flat_map_squares,
             game_version=extension_game_name() if uses_game_extension else GAME_VERSION,
@@ -92,7 +93,7 @@ class BatchConfiguration:
 
 
 def _draw_side(side: Side | list[Side], seed: int, number: int) -> Side:
-    """The faction of allyteam ``number`` in the match with this seed; the same seed always draws the same one."""
+    """The faction of team ``number`` in the match with this seed; the same seed always draws the same one."""
     if isinstance(side, str):
         return side
     return random.Random(f"{seed}:{number}").choice(side)
@@ -132,7 +133,7 @@ def load_batch_configuration(path: Path) -> BatchConfiguration:
 # Used by run_match.py and run_matches.py when no configuration file is given.
 DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "matches" / "barb_versus_barb.py"
 # Fields that a command line option cannot replace: they stay in the configuration file.
-NOT_OVERRIDABLE_FIELDS = {"scenario", "allyteams", "flat_map_squares"}
+NOT_OVERRIDABLE_FIELDS = {"scenario", "teams", "flat_map_squares"}
 
 
 def _overridable_fields() -> dict[str, tuple[str, object]]:

@@ -49,6 +49,8 @@ class MatchConfiguration:
             ArtificialIntelligencePlayer(side="Cortex"),
         ]
     )
+    # Alliance of each player, numbered 0, 1, ...; None: each player in an alliance of its own.
+    allyteams: list[int] | None = None
     map_name: str = DEFAULT_MAP
     # (width, height) in map squares: map_name is a flat map, generated before the match if missing (flat_map.py).
     flat_map_squares: tuple[int, int] | None = None
@@ -68,7 +70,7 @@ class MatchConfiguration:
 
 
 def build_start_script(configuration: MatchConfiguration) -> str:
-    """One spectator hosts the match; each artificial intelligence gets its own team and ally team."""
+    """One spectator hosts the match; each artificial intelligence gets its own team, in its ally team."""
     maximum_frames = int(configuration.maximum_game_minutes * 60 * FRAMES_PER_SECOND)
     # debugcommands is read by the game's cmd_dev_helpers gadget: "frame:command|frame:command".
     # MaxSpeed only lifts the engine limit (20 by default); setspeed actually applies the speed.
@@ -84,6 +86,9 @@ def build_start_script(configuration: MatchConfiguration) -> str:
         mod_options["experimentallegionfaction"] = "1"
     mod_options.update(configuration.extra_mod_options)
 
+    allyteams = configuration.allyteams or list(range(len(configuration.players)))
+    if len(allyteams) != len(configuration.players) or sorted(set(allyteams)) != list(range(max(allyteams) + 1)):
+        raise ValueError(f"allyteams must give each player an alliance numbered 0, 1, ...: {allyteams}")
     lines = [
         "[GAME]",
         "{",
@@ -99,7 +104,7 @@ def build_start_script(configuration: MatchConfiguration) -> str:
         f"\tFixedRNGSeed={configuration.seed};",
         "\tNumPlayers=1;",
         f"\tNumTeams={len(configuration.players)};",
-        f"\tNumAllyTeams={len(configuration.players)};",
+        f"\tNumAllyTeams={max(allyteams) + 1};",
         "\t[PLAYER0] { Name=observer; Spectator=1; Team=0; }",
     ]
     for index, player in enumerate(configuration.players):
@@ -123,10 +128,8 @@ def build_start_script(configuration: MatchConfiguration) -> str:
                 f"\t[AI{index}] {{ Name={player.short_name}_{index}; ShortName={player.short_name}; "
                 f"Version={player.version}; Team={index}; Host=0; }}"
             )
-        lines += [
-            f"\t[TEAM{index}] {{ TeamLeader=0; AllyTeam={index}; Side={player.side}; }}",
-            f"\t[ALLYTEAM{index}] {{ NumAllies=0; }}",
-        ]
+        lines.append(f"\t[TEAM{index}] {{ TeamLeader=0; AllyTeam={allyteams[index]}; Side={player.side}; }}")
+    lines += [f"\t[ALLYTEAM{allyteam}] {{ NumAllies=0; }}" for allyteam in range(max(allyteams) + 1)]
     lines.append("\t[MODOPTIONS]")
     lines.append("\t{")
     lines += [f"\t\t{key}={value};" for key, value in mod_options.items()]
