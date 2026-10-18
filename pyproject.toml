@@ -8,6 +8,8 @@ dependencies = ["gymnasium>=1.0", "matplotlib>=3.8", "pandas>=2.2", "pyarrow>=16
 [project.optional-dependencies]
 # pip install -e ".[development]"
 development = ["ruff", "basedpyright", "pytest"]
+# pip install -e ".[rllib]": the RLlib MultiAgentEnv wrapper (combat_multi_agent_environment.py)
+rllib = ["ray[rllib]==2.54.0"]
 
 [build-system]
 requires = ["setuptools>=68"]
