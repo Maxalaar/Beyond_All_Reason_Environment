@@ -1,6 +1,7 @@
 """Combat environment: encoding, rewards and spawns without the engine; one end-to-end check with it (marker
 "engine", run with `pytest -m engine`)."""
 
+from dataclasses import replace
 from pathlib import Path
 
 import numpy as np
@@ -9,10 +10,8 @@ import pytest
 from beyond_all_reason_environment.combat_configuration import (
     COMMANDS,
     ActionConfiguration,
-    AllyteamConfiguration,
     CombatConfiguration,
     ObservationConfiguration,
-    ScenarioConfiguration,
 )
 from beyond_all_reason_environment.combat_environment import (
     CONTEXT_FEATURES,
@@ -20,13 +19,19 @@ from beyond_all_reason_environment.combat_environment import (
     CombatEnvironment,
     chassis_feature_names,
     encode_observation,
-    spawn_positions,
     state_feature_names,
     team_reward,
     weapon_feature_names,
 )
 from beyond_all_reason_environment.game_extension import extension_game_name, write_game_extension
 from beyond_all_reason_environment.installation import GAME_VERSION
+from beyond_all_reason_environment.scenario import (
+    AGENT,
+    NULL_ARTIFICIAL_INTELLIGENCE,
+    AllyteamConfiguration,
+    ScenarioConfiguration,
+    spawn_positions,
+)
 from beyond_all_reason_environment.scenarios import five_versus_five, one_versus_one
 
 MAP_SIZE = (6144.0, 4096.0)
@@ -170,8 +175,8 @@ def test_team_reward_counts_damage_kills_and_victory():
 def test_spawns_put_agents_first_facing_the_opponent():
     scenario = ScenarioConfiguration(
         allyteams=[
-            AllyteamConfiguration(units={"armpw": 3}),
-            AllyteamConfiguration(units={"corak": 2}),
+            AllyteamConfiguration(player=AGENT, units={"armpw": 3}),
+            AllyteamConfiguration(player=NULL_ARTIFICIAL_INTELLIGENCE, units={"corak": 2}),
         ]
     )
     spawns = spawn_positions(scenario, np.random.default_rng(0))
@@ -257,7 +262,7 @@ def test_game_extension_depends_on_the_pinned_game(tmp_path: Path):
 
 @pytest.mark.engine
 def test_attacking_the_nearest_enemy_beats_a_passive_opponent():
-    configuration = CombatConfiguration(scenario=ScenarioConfiguration(maximum_episode_minutes=0.75))
+    configuration = CombatConfiguration(scenario=replace(five_versus_five, maximum_game_minutes=0.75))
     state_names = state_feature_names()
     x_idx, z_idx = state_names.index("x"), state_names.index("z")
     with CombatEnvironment(configuration) as environment:

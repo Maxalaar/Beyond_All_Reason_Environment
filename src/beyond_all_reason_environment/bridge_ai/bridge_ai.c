@@ -581,15 +581,21 @@ static void apply_actions(void) {
 /* Call the synced gadget to reset the scenario. The gadget destroys/spawns
  * units and returns the spawned unit IDs as a comma-separated string. */
 static void call_gadget_reset(const char *reset_json) {
-    /* Build the message: "rl_reset|episode|team,unit,x,z;...|fire0,move0,fire1,move1" */
+    /* Build the message: "rl_reset|episode|team,unit,x,z;...|fire0,move0,fire1,move1,..." */
     char msg[4096];
     int ep = jint(reset_json, "episode", 0);
     episode = ep;
 
-    /* States */
+    /* States: two per allyteam (fire, move; -1 keeps the unit's default), copied as they are. */
+    char states_str[256] = "";
     const char *states_arr = jarray_start(reset_json, "states");
-    int s[4] = {2, 1, 0, 0};
-    if (states_arr) sscanf(states_arr, "%d,%d,%d,%d", &s[0], &s[1], &s[2], &s[3]);
+    if (states_arr) {
+        const char *states_end = strchr(states_arr, ']');
+        int length = states_end ? (int)(states_end - states_arr) : 0;
+        if (length >= (int)sizeof(states_str)) length = (int)sizeof(states_str) - 1;
+        memcpy(states_str, states_arr, length);
+        states_str[length] = '\0';
+    }
 
     /* Spawns */
     char spawns_str[2048] = "";
@@ -621,8 +627,7 @@ static void call_gadget_reset(const char *reset_json) {
         }
     }
 
-    snprintf(msg, sizeof(msg), "rl_reset|%d|%s|%d,%d,%d,%d",
-             ep, spawns_str, s[0], s[1], s[2], s[3]);
+    snprintf(msg, sizeof(msg), "rl_reset|%d|%s|%s", ep, spawns_str, states_str);
 
     char response[MAX_RESPONSE_SIZE];
     memset(response, 0, sizeof(response));

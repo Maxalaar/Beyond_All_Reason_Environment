@@ -13,20 +13,23 @@ https://maps-metadata.beyondallreason.dev/latest/lobby_maps.validated.json. Down
 Run with: python scripts/run_matches.py configurations/matches/factions_by_map_size.py (about an hour).
 """
 
-from beyond_all_reason_environment import ArtificialIntelligencePlayer, BatchConfiguration
+from dataclasses import replace
+
+from beyond_all_reason_environment import BatchConfiguration
+from beyond_all_reason_environment.scenarios import armada_versus_cortex
 
 configuration = BatchConfiguration(
     name="factions_by_map_size",
+    # The armada_versus_cortex scenario, on three maps and with a longer time limit.
+    scenario=replace(
+        armada_versus_cortex,
+        map_name=["Red Comet Remake 1.8", "Comet Catcher Remake 1.8", "Archsimkats_Valley_V1"],
+        # Larger maps make longer matches; 60 minutes already stopped 8 matches out of 20 on the small map.
+        maximum_game_minutes=90,
+    ),
     matches=60,
     parallel=4,
     first_seed=1,
-    # Larger maps make longer matches; 60 minutes already stopped 8 matches out of 20 on the small map.
-    maximum_game_minutes=90,
-    map_name=["Red Comet Remake 1.8", "Comet Catcher Remake 1.8", "Archsimkats_Valley_V1"],
     record_replays=True,
     keep_engine_files=False,
-    players=[
-        ArtificialIntelligencePlayer(short_name="BARb", version="stable", side="Armada"),
-        ArtificialIntelligencePlayer(short_name="BARb", version="stable", side="Cortex"),
-    ],
 )

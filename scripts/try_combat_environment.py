@@ -8,19 +8,17 @@ Examples:
     python scripts/try_combat_environment.py --policy attack --episodes 5
     python scripts/try_combat_environment.py --policy random --opponent hold_and_fire
     python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
+    python scripts/try_combat_environment.py --scenario one_versus_one --graphical --speed 2
 """
 
 import argparse
 import time
+from dataclasses import replace
 
 import numpy as np
 
-from beyond_all_reason_environment.combat_configuration import (
-    COMMANDS,
-    AllyteamConfiguration,
-    CombatConfiguration,
-    ScenarioConfiguration,
-)
+from beyond_all_reason_environment import scenarios
+from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
 from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
 from beyond_all_reason_environment.engine_configuration import EngineConfiguration
 
@@ -47,20 +45,26 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--policy", choices=["random", "attack"], default="attack")
     parser.add_argument("--episodes", type=int, default=3)
-    parser.add_argument("--opponent", choices=["passive", "hold_and_fire"], default="passive")
+    parser.add_argument("--scenario", choices=["five_versus_five", "one_versus_one"], default="five_versus_five")
+    parser.add_argument(
+        "--opponent", choices=["passive", "hold_and_fire"], default="passive", help="behaviour of the opponents"
+    )
     parser.add_argument("--graphical", action="store_true")
     parser.add_argument("--speed", type=float, default=None, help="with --graphical, multiple of real time")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--keep-run-directory", action="store_true", help="keep the engine log after the run")
     arguments = parser.parse_args()
 
+    scenario = getattr(scenarios, arguments.scenario)
+    scenario = replace(
+        scenario,
+        allyteams=[
+            scenario.allyteams[0],
+            *(replace(allyteam, behaviour=arguments.opponent) for allyteam in scenario.allyteams[1:]),
+        ],
+    )
     configuration = CombatConfiguration(
-        scenario=ScenarioConfiguration(
-            allyteams=[
-                AllyteamConfiguration(units={"armpw": 5}),
-                AllyteamConfiguration(units={"armpw": 5}, behaviour=arguments.opponent),
-            ],
-        ),
+        scenario=scenario,
         engine=EngineConfiguration(
             graphical=arguments.graphical,
             speed=arguments.speed or (1.0 if arguments.graphical else 1000.0),

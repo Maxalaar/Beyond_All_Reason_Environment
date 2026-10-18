@@ -32,9 +32,15 @@ python scripts/browse_results.py                                    # web interf
 ```
 
 `run_matches.py` reads a Python file in `configurations/matches/` that defines
-`configuration = BatchConfiguration(...)`: the name of the run, the players, the number of matches,
-how many run in parallel, seeds, map, time limit. Each player keeps its color in every chart. Its `side` is one
-faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
+`configuration = BatchConfiguration(...)`: the name of the run, the scenario, the number of matches, how many run
+in parallel, seeds, replays. The scenario (`ScenarioConfiguration`, predefined ones in
+`beyond_all_reason_environment.scenarios`) says what happens in each match: map, time limit, and one allyteam per
+player, who plays it (`ArtificialIntelligencePlayer`) and how it starts: normally (a commander), or with placed
+units (`units`), as in the scenarios of the combat environment. The same scenario serves both: a scenario made for
+the agents runs in matches once a built-in artificial intelligence plays them,
+`one_versus_one.with_agents_played_by(ArtificialIntelligencePlayer(short_name="BARb"))`
+(see `configurations/matches/one_versus_one_barb.py`). Each player keeps its color in every chart. Its `side` is
+one faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
 (reproducibly from the seed) and `summary.txt` gives its wins per faction. To compare factions, give
 the players different factions; to compare artificial intelligences, give them different `short_name`.
 `map_name` is one map or a list: matches then take the maps in turn, so each map gets the same number of
@@ -43,8 +49,9 @@ matches (see `configurations/matches/factions_by_map_size.py`). Download maps fi
 the editor completes and type-checks the fields.
 
 Both `run_match.py` and `run_matches.py` take the same configuration file (default:
-`configurations/matches/barb_versus_barb.py`), and any field except `players` can be replaced on the command line with
-`--<field> <value>`, for example `--map_name "Comet Catcher Remake 1.8" --first_seed 7 --no-record_replays`
+`configurations/matches/barb_versus_barb.py`), and the simple fields of the series and of its scenario can be
+replaced on the command line with `--<field> <value>`, for example
+`--map_name "Comet Catcher Remake 1.8" --maximum_game_minutes 30 --first_seed 7 --no-record_replays`
 (`--help` lists them). `run_match.py` runs one match of the series, `--match_index <i>` (seed `first_seed + i`,
 map `i % number of maps`), and can show it with `--graphical`. Results go to `runs/<name>/`:
 
@@ -94,14 +101,14 @@ of separate parts, each answering one question:
 
 | Part | Class | Question |
 |---|---|---|
-| `scenario` | `ScenarioConfiguration` | what happens in the game: map, armies, opponent behaviour, start positions, episode length |
+| `scenario` | `ScenarioConfiguration` | what happens in the game: map, allyteams (`scenario.AGENT` plays allyteam 0, NullAI or another artificial intelligence the others), placed units and their behaviour, start positions, episode length; the same class as in matches |
 | `observation` | `ObservationConfiguration` | what each agent sees: entity counts (left to `None`, they follow the scenario), weapon slots, terrain grid |
 | `action` | `ActionConfiguration` | what each agent can do: commands per unit type, attack snap radius, decision interval |
 | `rewards` | `RewardWeights` | how the agents are rewarded |
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
-Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`)
-and only define the scenario part: an experiment, for example a training configuration of the reinforcement
+Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`,
+`armada_versus_cortex`) and only define the scenario part: an experiment, for example a training configuration of the reinforcement
 learning library, chooses the scenario and the other parts.
 
 ```python

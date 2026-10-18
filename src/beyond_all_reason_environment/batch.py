@@ -14,8 +14,10 @@ from dataclasses import asdict, dataclass, fields, replace
 from pathlib import Path
 from typing import get_type_hints
 
-from .installation import DEFAULT_MAP, REPOSITORY_ROOT
+from .game_extension import extension_game_name
+from .installation import GAME_VERSION, REPOSITORY_ROOT
 from .match import MatchResult, read_match_result, run_match
+from .scenario import ScenarioConfiguration, scenario_mod_options
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration, Side
 
 # Final engine statistics averaged per player in the summary.
@@ -33,21 +35,17 @@ SUMMARISED_STATISTICS = [
 
 @dataclass
 class BatchConfiguration:
-    """A series of matches. Configuration files in configurations/matches/ define one, named ``configuration``."""
+    """A series of matches of one scenario. Files in configurations/matches/ define one, named ``configuration``."""
 
     # Also the name of the results folder: runs/<name>/version_<n>/, a new version at each run.
     name: str
-    players: list[ArtificialIntelligencePlayer]
+    # What happens in each match: map(s), players, how they start, time limit (see scenarios/).
+    scenario: ScenarioConfiguration
     matches: int = 5
     # Matches at the same time, about 5 GB of memory each.
     parallel: int = 4
     # Match i uses seed first_seed + i.
     first_seed: int = 1
-    maximum_game_minutes: float = 60.0
-    # One map, or a list: matches then take the maps in turn (match i plays map i % len), so each map gets
-    # the same number of matches (60 matches on 3 maps: 20 each). Maps must be downloaded first
-    # (python scripts/download_game_data.py --map "<name>").
-    map_name: str | list[str] = DEFAULT_MAP
     # Save a replay of each match (a few hundred kB each), to watch with scripts/watch_replay.py.
     record_replays: bool = False
     # Keep everything the engine writes in each match folder (about 5 MB), for debugging.
@@ -56,12 +54,12 @@ class BatchConfiguration:
     def __post_init__(self) -> None:
         if not re.fullmatch(r"[A-Za-z0-9_-]+", self.name):
             raise ValueError(f"name {self.name!r} may only contain letters, digits, _ and -")
-        if len(self.players) < 2:
-            raise ValueError("at least two players are needed")
         if self.matches < 1 or self.parallel < 1:
             raise ValueError("matches and parallel must be at least 1")
-        if not self.map_name:
-            raise ValueError("map_name must be a map or a non-empty list of maps")
+        if self.scenario.has_agents:
+            raise ValueError(
+                "nobody plays the agents in a match without Python: use scenario.with_agents_played_by(<player>)"
+            )
 
     def match_configurations(self) -> list[MatchConfiguration]:
         """One configuration per match; players with several factions get one drawn from their list."""
@@ -73,16 +71,22 @@ class BatchConfiguration:
         ``index`` may go beyond ``matches``, to run one more match of the same series.
         """
         seed = self.first_seed + index
+        scenario = self.scenario
+        maps = scenario.map_name
+        # Placed units and full vision come from the gadget of the game extension.
+        uses_game_extension = scenario.places_units or scenario.full_vision
         return MatchConfiguration(
             players=[
-                ArtificialIntelligencePlayer(player.short_name, player.version, _draw_side(player, seed, number))
-                for number, player in enumerate(self.players)
+                replace(player, side=_draw_side(player, seed, number)) for number, player in enumerate(scenario.players)
             ],
-            map_name=self.map_name if isinstance(self.map_name, str) else self.map_name[index % len(self.map_name)],
+            map_name=maps if isinstance(maps, str) else maps[index % len(maps)],
+            flat_map_squares=scenario.flat_map_squares,
+            game_version=extension_game_name() if uses_game_extension else GAME_VERSION,
             seed=seed,
-            maximum_game_minutes=self.maximum_game_minutes,
+            maximum_game_minutes=scenario.maximum_game_minutes,
             record_replay=self.record_replays,
             keep_engine_files=self.keep_engine_files,
+            extra_mod_options=scenario_mod_options(scenario, seed) if uses_game_extension else {},
         )
 
 
@@ -127,21 +131,26 @@ def load_batch_configuration(path: Path) -> BatchConfiguration:
 # Used by run_match.py and run_matches.py when no configuration file is given.
 DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "matches" / "barb_versus_barb.py"
 # Fields that a command line option cannot replace: they stay in the configuration file.
-NOT_OVERRIDABLE_FIELDS = {"players"}
+NOT_OVERRIDABLE_FIELDS = {"scenario", "allyteams", "flat_map_squares"}
 
 
-def _overridable_fields() -> dict[str, object]:
-    """Field name -> type, for every field of BatchConfiguration that has a command line option."""
-    hints = get_type_hints(BatchConfiguration)
-    return {
-        field.name: hints[field.name]
-        for field in fields(BatchConfiguration)
-        if field.name not in NOT_OVERRIDABLE_FIELDS
-    }
+def _overridable_fields() -> dict[str, tuple[str, object]]:
+    """Field name -> (owner, type) for every field with a command line option; owner is "batch" or "scenario".
+
+    The scenario's fields are offered next to the series' own (--map_name, --maximum_game_minutes...).
+    """
+    overridable = {}
+    for owner, cls in (("batch", BatchConfiguration), ("scenario", ScenarioConfiguration)):
+        hints = get_type_hints(cls)
+        for field in fields(cls):
+            if field.name not in NOT_OVERRIDABLE_FIELDS:
+                overridable[field.name] = (owner, hints[field.name])
+    return overridable
 
 
 def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
-    """The configuration file, optional, and one --<field> option per field of BatchConfiguration to replace it.
+    """The configuration file, optional, and one --<field> option per field to replace, of the series or of its
+    scenario.
 
     Options take the exact field names (--map_name). Booleans also have a --no-<field> form; map_name takes
     one map or several.
@@ -153,34 +162,36 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         default=DEFAULT_CONFIGURATION_FILE,
         help=f"Python configuration file, see configurations/matches/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
     )
-    group = parser.add_argument_group("replace a field of the configuration file")
-    for name, annotation in _overridable_fields().items():
+    group = parser.add_argument_group("replace a field of the configuration file or of its scenario")
+    for name, (_, annotation) in _overridable_fields().items():
         options: dict = {"dest": f"override_{name}", "default": None}
         if annotation is bool:
             options["action"] = argparse.BooleanOptionalAction
-        elif annotation in (int, float, str):
-            options["type"] = annotation
-            options["metavar"] = annotation.__name__  # pyright: ignore[reportAttributeAccessIssue]
+        elif annotation in (int, float, str, float | None):
+            value_type = float if annotation == float | None else annotation
+            options["type"] = value_type
+            options["metavar"] = value_type.__name__  # pyright: ignore[reportAttributeAccessIssue]
         elif annotation == str | list[str]:
             options["nargs"] = "+"
             options["metavar"] = "str"
         else:
-            raise TypeError(f"no command line option for the type of BatchConfiguration.{name}: {annotation}")
+            raise TypeError(f"no command line option for the type of {name}: {annotation}")
         group.add_argument(f"--{name}", **options)
 
 
 def configuration_from_arguments(arguments: argparse.Namespace) -> BatchConfiguration:
     """The configuration file of ``arguments``, with the fields given on the command line replaced."""
     configuration = load_batch_configuration(arguments.configuration)
-    overrides = {}
-    for name in _overridable_fields():
+    overrides: dict[str, dict] = {"batch": {}, "scenario": {}}
+    for name, (owner, _) in _overridable_fields().items():
         value = getattr(arguments, f"override_{name}")
         if value is None:
             continue
         # nargs="+" always gives a list; one map stays a plain name.
-        overrides[name] = value[0] if isinstance(value, list) and len(value) == 1 else value
+        overrides[owner][name] = value[0] if isinstance(value, list) and len(value) == 1 else value
     # replace() runs __post_init__ again, so replaced values are checked like the ones of the file.
-    return replace(configuration, **overrides)
+    scenario = replace(configuration.scenario, **overrides["scenario"])
+    return replace(configuration, scenario=scenario, **overrides["batch"])
 
 
 def save_configuration(batch_directory: Path, configuration: BatchConfiguration, arguments: argparse.Namespace) -> None:

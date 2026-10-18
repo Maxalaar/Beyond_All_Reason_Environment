@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from .flat_map import ensure_flat_map
+from .game_extension import extension_game_name, write_game_extension
 from .installation import GAME_DATA_DIRECTORY, GRAPHICAL_EXECUTABLE, HEADLESS_EXECUTABLE, REPOSITORY_ROOT
 from .start_script import FRAMES_PER_SECOND, MatchConfiguration, build_start_script
 
@@ -127,7 +129,7 @@ def _tidy_run_directory(run_directory: Path, keep_engine_files: bool) -> None:
 
 
 def start_engine(configuration: MatchConfiguration, run_directory: Path, graphical: bool = False) -> subprocess.Popen:
-    """Prepare ``run_directory`` (widgets, start script) and start the engine on it without waiting.
+    """Prepare ``run_directory`` (widgets, game extension, start script) and start the engine on it without waiting.
 
     The engine output goes to engine_output.log in the run folder.
     """
@@ -140,6 +142,11 @@ def start_engine(configuration: MatchConfiguration, run_directory: Path, graphic
     widgets_directory.mkdir(parents=True, exist_ok=True)
     for widget in LUA_WIDGETS_DIRECTORY.glob("*.lua"):
         shutil.copy(widget, widgets_directory)
+
+    if configuration.game_version == extension_game_name():
+        write_game_extension(run_directory)
+    if configuration.flat_map_squares is not None:
+        ensure_flat_map(configuration.map_name, *configuration.flat_map_squares)
 
     script_path = run_directory / "script.txt"
     script_path.write_text(build_start_script(configuration))

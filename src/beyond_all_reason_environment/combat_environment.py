@@ -98,18 +98,19 @@ blocks on Python; the whole simulation pauses while Python computes actions, giv
 
 import os
 import socket
+from dataclasses import replace
 from datetime import datetime
 
 import numpy as np
 from gymnasium import spaces
 
-from .combat_configuration import COMMANDS, OPPONENT_STATES, CombatConfiguration, ScenarioConfiguration
+from .combat_configuration import COMMANDS, CombatConfiguration
 from .environment import CONNECTION_TIMEOUT_SECONDS, Environment
-from .flat_map import ensure_flat_map
-from .game_extension import write_game_extension
+from .game_extension import extension_game_name
 from .installation import build_bridge_ai
 from .match import RUNS_DIRECTORY, start_engine
-from .start_script import FRAMES_PER_SECOND, ArtificialIntelligencePlayer, MatchConfiguration
+from .scenario import spawn_positions, unit_states
+from .start_script import FRAMES_PER_SECOND, MatchConfiguration
 
 COMMAND_STATES = ("none", "move", "fight", "attack", "stop", "other")
 
@@ -269,7 +270,7 @@ def _context_features(
         size_x / 1000,
         size_z / 1000,
         size_x / size_z,
-        episode_frame / configuration.scenario.maximum_episode_frames,
+        episode_frame / configuration.scenario.maximum_game_frames,
         frames_since_previous_decision / configuration.action.decision_interval_frames,
     ]
 
@@ -534,54 +535,6 @@ def team_reward(
     return float(reward)
 
 
-def spawn_positions(scenario: ScenarioConfiguration, random: np.random.Generator) -> list[dict]:
-    """One spawn entry per unit across all allyteams, agents (allyteam 0) first.
-
-    Allyteams are spread evenly along x; units within each allyteam are spread along z.
-
-    With spawn_x_range set, allyteam t is centred at t / (N-1) along x, and the zone width
-    is spawn_x_range / (N-1) on each side (clipped to [0,1]).
-    spawn_x_range=0 gives deterministic positions at 0, 1/(N-1), …, 1.
-    spawn_x_range=1 gives each allyteam its full 1/N slice of the map.
-
-    With spawn_x_range=None, the classic group_separation/group_spread/spawn_jitter logic is used,
-    with allyteams placed at equal intervals of group_separation around the map centre.
-    """
-    n_allyteams = len(scenario.allyteams)
-    spawns = []
-    x_range = scenario.spawn_x_range
-
-    if x_range is not None:
-        spread = x_range / (2 * max(n_allyteams - 1, 1))
-        for t, at in enumerate(scenario.allyteams):
-            base_x = t / max(n_allyteams - 1, 1)
-            lo = max(0.0, base_x - spread)
-            hi = min(1.0, base_x + spread)
-            names = [name for name, count in at.units.items() for _ in range(count)]
-            for index, name in enumerate(names):
-                x = float(lo if lo == hi else random.uniform(lo, hi))
-                offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
-                jitter_z = float(random.uniform(-1, 1) * scenario.spawn_jitter)
-                z = float(np.clip(0.5 + offset * scenario.group_spread + jitter_z, 0, 1))
-                spawns.append({"team": t, "unit": name, "x": x, "z": z})
-    else:
-        for t, at in enumerate(scenario.allyteams):
-            centre_x = 0.5 + (t - (n_allyteams - 1) / 2) * scenario.group_separation
-            names = [name for name, count in at.units.items() for _ in range(count)]
-            for index, name in enumerate(names):
-                offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
-                jitter_x, jitter_z = random.uniform(-1, 1, 2) * scenario.spawn_jitter
-                spawns.append(
-                    {
-                        "team": t,
-                        "unit": name,
-                        "x": float(np.clip(centre_x + jitter_x, 0, 1)),
-                        "z": float(np.clip(0.5 + offset * scenario.group_spread + jitter_z, 0, 1)),
-                    }
-                )
-    return spawns
-
-
 class CombatEnvironment(Environment):
     """One engine process running a combat scenario; episodes reset inside the match without reloading the game."""
 
@@ -714,18 +667,14 @@ class CombatEnvironment(Environment):
     def _start(self) -> None:
         configuration = self.configuration
         build_bridge_ai()
-        if configuration.scenario.flat_map_squares is not None:
-            ensure_flat_map(configuration.scenario.map_name, *configuration.scenario.flat_map_squares)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.run_directory = RUNS_DIRECTORY / "combat_environments" / f"{timestamp}_{os.getpid()}_{id(self) % 100000}"
         self._server = socket.create_server(("127.0.0.1", 0))
         self._server.settimeout(CONNECTION_TIMEOUT_SECONDS)
         port = self._server.getsockname()[1]
         players = [
-            ArtificialIntelligencePlayer(
-                short_name="BridgeAI",
-                version="0.1",
-                side="Armada",
+            replace(
+                configuration.scenario.allyteams[0].player,
                 options={
                     "port": str(port),
                     "decision_interval": str(configuration.action.decision_interval_frames),
@@ -734,15 +683,13 @@ class CombatEnvironment(Environment):
                     "terrain_h": str(configuration.observation.terrain_resolution[1]),
                 },
             ),
-            *[
-                ArtificialIntelligencePlayer(short_name="NullAI", version="0.1", side="Armada")
-                for _ in range(1, len(configuration.scenario.allyteams))
-            ],
+            *configuration.scenario.players[1:],
         ]
         match_configuration = MatchConfiguration(
             players=players,
             map_name=configuration.scenario.map_name,
-            game_version=write_game_extension(self.run_directory),
+            flat_map_squares=configuration.scenario.flat_map_squares,
+            game_version=extension_game_name(),
             speed=configuration.engine.speed,
             maximum_game_minutes=1_000_000,
             extra_mod_options={
@@ -805,10 +752,9 @@ class CombatEnvironment(Environment):
             self._start()
         self._episode += 1
         configuration = self.configuration
-        states = [configuration.action.agent_fire_state, configuration.action.agent_move_state]
-        for at in configuration.scenario.allyteams[1:]:
-            fire, move = OPPONENT_STATES[at.behaviour]
-            states.extend([fire, move])
+        states = unit_states(
+            configuration.scenario, (configuration.action.agent_fire_state, configuration.action.agent_move_state)
+        )
         self._send(
             {
                 "type": "reset",
@@ -855,7 +801,7 @@ class CombatEnvironment(Environment):
         self._previous = raw
         alive = {u["id"] for u in raw["units"] if u["team"] == 0}
         enemies_left = any(u["team"] != 0 for u in raw["units"])
-        time_over = raw["episode_frame"] >= self.configuration.scenario.maximum_episode_frames
+        time_over = raw["episode_frame"] >= self.configuration.scenario.maximum_game_frames
 
         observations = self._observations(raw)
         rewards = {agent: reward for agent in self.agents}

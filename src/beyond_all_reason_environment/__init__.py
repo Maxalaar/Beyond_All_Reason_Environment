@@ -4,6 +4,7 @@ from pathlib import Path
 
 from .batch import BatchConfiguration
 from .match import MatchResult, run_match
+from .scenario import AllyteamConfiguration, ScenarioConfiguration
 from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
 
 
@@ -13,10 +14,12 @@ def results_browser_path() -> Path:
 
 
 __all__ = [
+    "AllyteamConfiguration",
     "ArtificialIntelligencePlayer",
     "BatchConfiguration",
     "MatchConfiguration",
     "MatchResult",
     "results_browser_path",
     "run_match",
+    "ScenarioConfiguration",
 ]

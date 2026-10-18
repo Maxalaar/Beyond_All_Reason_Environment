@@ -67,12 +67,22 @@ so the environment must match its interface (to confirm).
   combat_multi_agent_environment.py (RLlib wrapper, extra "rllib"), engine_configuration.py, scenarios/, flat_map.py,
   game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_combat_environment.py,
   tests/test_combat_environment.py (`pytest -m engine` for the end-to-end test).
-- Configuration layout (agreed 2026-10-18): CombatConfiguration = scenario (ScenarioConfiguration: map, allyteams,
-  spawns, episode length) + observation + action + rewards + engine. Scenarios (scenarios/<name>.py, variable named
-  like the file) define only the scenario; the experiment (training configuration in Maxalaar_Reinforcement_Learning,
-  configurations/beyond_all_reason/) chooses observation, action and rewards. Observation counts left to None follow
+- Configuration layout (agreed 2026-10-18): one scenario type for everything (scenario.py, ScenarioConfiguration:
+  map, time limit, allyteams = player + optional placed units + behaviour), no "combat" vs "match" split.
+  CombatConfiguration = scenario + observation + action + rewards + engine; BatchConfiguration = scenario + series
+  parameters (matches, parallel, seeds, replays). Scenarios (scenarios/<name>.py, variable named like the file)
+  define only the scenario; the experiment (training configuration in Maxalaar_Reinforcement_Learning,
+  configurations/beyond_all_reason/) chooses observation, action and rewards. scenario.AGENT (BridgeAI) marks the
+  agents; with_agents_played_by(BARb) runs an agent scenario as matches. Observation counts left to None follow
   the scenario. Armor types are the constant NUMBER_OF_ARMOR_TYPES (checked against the engine at start).
-  Match series (BatchConfiguration, no reinforcement learning) live in configurations/matches/.
+  Match series live in configurations/matches/.
+- Placed units in a match (no Python): the gadget reads mod option reinforcement_learning_scenario
+  ("team,unit,x,z/...|states", "/" because ";" ends a start-script value) at frame 1, spawns the units, then removes
+  the commanders (spawn first, so game_end never sees an empty team); deathmode=killall. editor_sandbox=1 would skip
+  commanders but also disables game_end, so it is not used. Matches with placed units or full vision use the game
+  extension as GameType (start_engine writes it; replay.py too).
+- BARb with only placed units (one_versus_one_barb, 2026-10-18): it mostly leaves its Pawn idle (no damage in 6
+  minutes, once 54 damage just before 2 minutes, same seed): not a useful baseline for unit-only scenarios.
 - The game extension (archive "Beyond All Reason Reinforcement Learning 1", depends on the pinned BAR) is written
   into <run>/games/ and is the GameType; its widget keeps LuaSocket (BAR only sandboxes user widgets).
 - Every unsynced -> synced message (LuaRulesMsg, AI commands too) goes through the server, which simulates ahead of

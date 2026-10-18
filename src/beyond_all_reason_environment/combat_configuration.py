@@ -2,7 +2,8 @@
 
 A CombatConfiguration is made of separate parts, each answering one question:
 
-    scenario     ScenarioConfiguration    what happens in the game: map, armies, start positions, episode length
+    scenario     ScenarioConfiguration    what happens in the game: map, allyteams and who plays them, placed units,
+                                          start positions, episode length (scenario.py, shared with the matches)
     observation  ObservationConfiguration what each agent sees
     action       ActionConfiguration      what each agent can do, and how often it decides
     rewards      RewardWeights            how the agents are rewarded
@@ -13,90 +14,14 @@ configuration) chooses the scenario and the other parts.
 """
 
 from dataclasses import dataclass, field, replace
-from typing import Literal
 
 from .engine_configuration import EngineConfiguration
-from .installation import DEFAULT_MAP
-from .start_script import FRAMES_PER_SECOND
+from .scenario import FIRE_AT_WILL, MANOEUVRE, ScenarioConfiguration, is_agent
+from .scenarios.five_versus_five import five_versus_five
 
 # Every command an agent may give, in the order of the action index. A unit type only gets the ones listed for it
 # in ActionConfiguration.commands; the others are masked.
 COMMANDS = ("continue", "move", "fight", "attack", "stop")
-
-# Fire states: 0 hold fire, 1 return fire, 2 fire at will. Move states: 0 hold position, 1 manoeuvre, 2 roam.
-FIRE_AT_WILL, HOLD_FIRE = 2, 0
-HOLD_POSITION, MANOEUVRE = 0, 1
-OPPONENT_STATES = {
-    "passive": (HOLD_FIRE, HOLD_POSITION),  # does not move, does not shoot
-    "hold_and_fire": (FIRE_AT_WILL, HOLD_POSITION),  # does not move, shoots what comes in range
-}
-
-
-@dataclass
-class AllyteamConfiguration:
-    """Units and (for non-agent allyteams) behaviour of one allyteam.
-
-    Allyteam 0 is always controlled by the agents; its behaviour field is ignored.
-    Allyteams 1+ are NullAI-driven with the specified fire/move state preset:
-        passive:       does not move, does not shoot.
-        hold_and_fire: does not move, shoots what comes into range.
-    """
-
-    units: dict[str, int] = field(default_factory=lambda: {"armpw": 5})
-    behaviour: Literal["passive", "hold_and_fire"] = "hold_and_fire"
-
-
-@dataclass
-class ScenarioConfiguration:
-    """What happens in the game, independently of the agents: N allyteams fight until one side is eliminated.
-
-    allyteams[0]  — the agents' units (one agent per unit).
-    allyteams[1+] — NullAI opponents, with per-allyteam fire/move state presets.
-    """
-
-    map_name: str = DEFAULT_MAP
-    # (width, height) in map squares (multiples of 128): map_name is then a flat map generated with this size
-    # the first time the environment starts, if game_data/maps/ does not have it yet.
-    flat_map_squares: tuple[int, int] | None = None
-    allyteams: list[AllyteamConfiguration] = field(
-        default_factory=lambda: [AllyteamConfiguration(units={"armpw": 5}), AllyteamConfiguration(units={"armpw": 5})]
-    )
-    maximum_episode_minutes: float = 1.0
-
-    # Spawn: allyteams spread along x, units spread along z (fractions of the map).
-    group_separation: float = 0.15
-    group_spread: float = 0.06
-    spawn_jitter: float = 0.01
-    # Spawn zone range in [0, 1]: controls how wide each allyteam's spawn zone is along x.
-    # At 0.0 each allyteam spawns at a single deterministic x (evenly spread across [0, 1]).
-    # At 1.0 each allyteam occupies its full band of the map width.
-    # When None, the classic group_separation / group_spread / spawn_jitter logic is used instead.
-    spawn_x_range: float | None = None
-
-    # Every allyteam sees the whole map; required so the engine accepts attack orders on distant units.
-    full_vision: bool = True
-
-    def __post_init__(self) -> None:
-        if len(self.allyteams) < 2:
-            raise ValueError("a scenario requires at least 2 allyteams")
-        for t, at in enumerate(self.allyteams[1:], start=1):
-            if at.behaviour not in OPPONENT_STATES:
-                raise ValueError(
-                    f"allyteams[{t}].behaviour must be one of {sorted(OPPONENT_STATES)}, got {at.behaviour!r}"
-                )
-
-    @property
-    def unit_types(self) -> list[str]:
-        """Every unit name across all allyteams, sorted: the order of the unit type one-hot in observations."""
-        return sorted(set(name for at in self.allyteams for name in at.units))
-
-    @property
-    def number_of_agents(self) -> int:
-        return sum(self.allyteams[0].units.values())
-
-    @property
-    def maximum_episode_frames(self) -> int:
-        return int(self.maximum_episode_minutes * 60 * FRAMES_PER_SECOND)
 
 
 @dataclass
@@ -127,7 +52,7 @@ class ObservationConfiguration:
 
     def resolved(self, scenario: ScenarioConfiguration) -> "ObservationConfiguration":
         """A copy where every None count is replaced by the number of units the scenario can have there."""
-        unit_counts = [sum(at.units.values()) for at in scenario.allyteams]
+        unit_counts = [sum((at.units or {}).values()) for at in scenario.allyteams]
 
         def chosen(value: int | None, default: int) -> int:
             return default if value is None else value
@@ -183,12 +108,27 @@ class RewardWeights:
 class CombatConfiguration:
     """Everything a CombatEnvironment needs: a scenario, and how the agents see, act and are rewarded in it."""
 
-    scenario: ScenarioConfiguration = field(default_factory=ScenarioConfiguration)
+    scenario: ScenarioConfiguration = field(default_factory=lambda: five_versus_five)
     observation: ObservationConfiguration = field(default_factory=ObservationConfiguration)
     action: ActionConfiguration = field(default_factory=ActionConfiguration)
     rewards: RewardWeights = field(default_factory=RewardWeights)
     engine: EngineConfiguration = field(default_factory=EngineConfiguration)
 
     def __post_init__(self) -> None:
+        scenario = self.scenario
+        if not is_agent(scenario.allyteams[0].player) or any(is_agent(p) for p in scenario.players[1:]):
+            raise ValueError("the agents (scenario.AGENT) play allyteam 0, and only it")
+        if not scenario.places_units:
+            raise ValueError("the combat environment needs placed units (allyteam units), not a normal start")
+        if not isinstance(scenario.map_name, str):
+            raise ValueError("the combat environment plays a single map, not a list")
+        if not scenario.full_vision:
+            raise ValueError(
+                "the combat environment needs scenario.full_vision: the engine drops attack orders on units the "
+                "team does not see"
+            )
+        for player in scenario.players:
+            if not isinstance(player.side, str):
+                raise ValueError(f"the combat environment needs one faction per player, not {player.side!r}")
         # replace() makes a copy: an ObservationConfiguration shared by several configurations stays untouched.
         self.observation = self.observation.resolved(self.scenario)

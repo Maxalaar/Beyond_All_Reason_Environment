@@ -1,15 +1,21 @@
--- Synced side of the reinforcement learning micro environment (see micro_environment.py).
+-- Synced side of the scenarios (see scenario.py): places the units of a scenario and sets their states.
 --
--- Receives reset requests from the BridgeAI (C Skirmish AI, team 0) via
--- gadget:RecvSkirmishAIMessage. The BridgeAI calls COMMAND_CALL_LUA_RULES which invokes
--- this handler synchronously, in the same frame — no server-lead delay.
+-- Two ways to start a scenario:
 --
--- Message format from the BridgeAI:
---   "rl_reset|<episode>|<team>,<unit>,<x>,<z>;...|<t0_fire>,<t0_move>,<t1_fire>,<t1_move>,..."
---      removes every unit of all active teams and the wrecks of the previous episode,
---      spawns the new units (x, z as fractions of the map), sets fire and move states.
---      The states array has 2*N values for N allyteams: fire and move per team index.
---      Returns: "<unit_id>,<unit_id>,..." (spawned order, agents first).
+-- 1. Combat environment (combat_environment.py): the BridgeAI (C Skirmish AI, team 0) sends a reset request at
+--    each episode via gadget:RecvSkirmishAIMessage. The BridgeAI calls COMMAND_CALL_LUA_RULES, which invokes
+--    this handler synchronously, in the same frame — no server-lead delay.
+--      "rl_reset|<episode>|<team>,<unit>,<x>,<z>;...|<t0_fire>,<t0_move>,<t1_fire>,<t1_move>,..."
+--    Returns: "<unit_id>,<unit_id>,..." (spawned order, agents first).
+--
+-- 2. A match without Python (batch.py): the mod option reinforcement_learning_scenario holds the same spawns and
+--    states, "<team>,<unit>,<x>,<z>/...|<t0_fire>,<t0_move>,...", applied once at SETUP_FRAME. Spawns are separated
+--    by "/" there because ";" ends a value in the start script.
+--
+-- Each reset spawns the new units (x, z as fractions of the map) first, then removes every unit that was there
+-- before (commanders at the start of a match) and the wrecks of the previous episode: a team is never left without
+-- units, so the game's end condition (deathmode killall in matches) only fires when a side is really eliminated.
+-- The states array has 2*N values for N allyteams: fire and move per team index, -1 keeps the unit's default.
 
 if not gadgetHandler:IsSyncedCode() then
 	return
@@ -18,13 +24,16 @@ end
 function gadget:GetInfo()
 	return {
 		name    = "Reinforcement Learning Scenario",
-		desc    = "Spawns and resets units for the reinforcement learning micro environment",
+		desc    = "Spawns and resets the units of a reinforcement learning scenario",
 		layer   = 0,
 		enabled = true,
 	}
 end
 
 local modOptions = Spring.GetModOptions()
+
+-- Commanders are created at GameStart (game_initial_spawn.lua); the scenario replaces them just after.
+local SETUP_FRAME = 1
 
 local currentEpisode  = -1
 local episodeFeatures = {}  -- wrecks created during the current episode
@@ -44,21 +53,20 @@ local function mapPoint(x, z)
 end
 
 local function setStates(unitID, fireState, moveState)
-	Spring.GiveOrderToUnit(unitID, CMD.FIRE_STATE, { fireState }, 0)
-	Spring.GiveOrderToUnit(unitID, CMD.MOVE_STATE, { moveState }, 0)
+	if fireState >= 0 then
+		Spring.GiveOrderToUnit(unitID, CMD.FIRE_STATE, { fireState }, 0)
+	end
+	if moveState >= 0 then
+		Spring.GiveOrderToUnit(unitID, CMD.MOVE_STATE, { moveState }, 0)
+	end
 end
 
-local function reset(message)
-	local fields  = split(message, "|")
-	local episode = tonumber(fields[1])
+-- Spawns the units of spawnsText, then removes every unit and wreck of before; returns the new unit IDs.
+local function placeScenario(spawnsText, spawnSeparator, statesText)
 	-- states: 2*N values — fire and move state for team 0, 1, …, N-1
-	local states  = split(fields[3] or "2,1,0,0", ",")
+	local states = split(statesText or "", ",")
 
-	for _, teamID in ipairs(Spring.GetTeamList()) do
-		for _, unitID in ipairs(Spring.GetTeamUnits(teamID)) do
-			Spring.DestroyUnit(unitID, false, true)  -- reclaimed: no wreck
-		end
-	end
+	local previousUnits = Spring.GetAllUnits()
 	for featureID in pairs(episodeFeatures) do
 		if Spring.ValidFeatureID(featureID) then
 			Spring.DestroyFeature(featureID)
@@ -67,7 +75,7 @@ local function reset(message)
 	episodeFeatures = {}
 
 	local unitIDs = {}
-	for _, spawn in ipairs(split(fields[2] or "", ";")) do
+	for _, spawn in ipairs(split(spawnsText or "", spawnSeparator)) do
 		local values  = split(spawn, ",")
 		local teamID  = tonumber(values[1])
 		local name    = values[2]
@@ -77,8 +85,8 @@ local function reset(message)
 		local uid     = Spring.CreateUnit(name, x, y, z, facing, teamID)
 		if uid then
 			-- states array is 1-indexed in Lua; team t uses indices 2*t+1 and 2*t+2.
-			local fireState = tonumber(states[teamID * 2 + 1]) or 0
-			local moveState = tonumber(states[teamID * 2 + 2]) or 0
+			local fireState = tonumber(states[teamID * 2 + 1]) or -1
+			local moveState = tonumber(states[teamID * 2 + 2]) or -1
 			setStates(uid, fireState, moveState)
 			unitIDs[#unitIDs + 1] = tostring(uid)
 		else
@@ -87,9 +95,29 @@ local function reset(message)
 		end
 	end
 
-	currentEpisode = episode
+	for _, unitID in ipairs(previousUnits) do
+		if Spring.ValidUnitID(unitID) then
+			Spring.DestroyUnit(unitID, false, true)  -- reclaimed: no wreck
+		end
+	end
+	return unitIDs
+end
+
+local function reset(message)
+	local fields = split(message, "|")
+	local unitIDs = placeScenario(fields[2], ";", fields[3])
+	currentEpisode = tonumber(fields[1])
 	-- Return the spawned unit IDs to the BridgeAI (synchronous response).
 	return table.concat(unitIDs, ",")
+end
+
+function gadget:GameFrame(frame)
+	local scenario = modOptions.reinforcement_learning_scenario
+	if frame == SETUP_FRAME and scenario and scenario ~= "" then
+		local fields = split(scenario, "|")
+		placeScenario(fields[1], "/", fields[2])
+		currentEpisode = 0
+	end
 end
 
 function gadget:RecvSkirmishAIMessage(aiTeam, message)

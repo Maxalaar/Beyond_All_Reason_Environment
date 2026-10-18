@@ -43,6 +43,9 @@ class MatchConfiguration:
         ]
     )
     map_name: str = DEFAULT_MAP
+    # (width, height) in map squares: map_name is a flat map, generated before the match if missing (flat_map.py).
+    flat_map_squares: tuple[int, int] | None = None
+    # The game, or the game extension (game_extension.py) when the gadget places units or gives full vision.
     game_version: str = GAME_VERSION
     seed: int = 1
     # Multiple of real time. Without graphics, a high value means "as fast as the processor allows".

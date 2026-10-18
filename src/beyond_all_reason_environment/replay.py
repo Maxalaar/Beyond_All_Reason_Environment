@@ -4,6 +4,7 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from .game_extension import write_game_extension
 from .installation import GRAPHICAL_EXECUTABLE
 from .match import graphical_environment
 
@@ -25,6 +26,8 @@ def watch_replay(replay_path: Path, speed: float = 1.0) -> None:
         widgets_directory.mkdir(parents=True)
         widget = REPLAY_SPEED_WIDGET.read_text().replace("local SPEED = 1\n", f"local SPEED = {speed:g}\n")
         (widgets_directory / REPLAY_SPEED_WIDGET.name).write_text(widget)
+        # Matches of scenarios with placed units were played with the game extension.
+        write_game_extension(write_directory)
         subprocess.run(
             [str(GRAPHICAL_EXECUTABLE), "--isolation", "--write-dir", str(write_directory), str(replay_path)],
             cwd=write_directory,
