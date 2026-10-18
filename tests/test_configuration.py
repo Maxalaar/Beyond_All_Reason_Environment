@@ -232,5 +232,16 @@ def test_graphics_settings_reach_the_engine_and_the_widget(tmp_path):
     write_graphics_widget(tmp_path, GraphicsConfiguration(camera_keys="zqsd", close_delay_seconds=2.5))
     widget = (tmp_path / "graphics_settings.lua").read_text()
     assert 'local CAMERA_KEYS = "zqsd"' in widget and "local CLOSE_DELAY_SECONDS = 2.5" in widget
+    assert "local RIGHT_BUTTON_ROTATION = true" in widget
+    assert "local HORIZONTAL_ROTATION_SIGN = 1" in widget and "local VERTICAL_ROTATION_SIGN = 1" in widget
+    graphics = GraphicsConfiguration(
+        right_button_rotation=False, camera_rotation_speed=0.001, invert_vertical_rotation=True
+    )
+    write_graphics_widget(tmp_path, graphics)
+    widget = (tmp_path / "graphics_settings.lua").read_text()
+    assert "local RIGHT_BUTTON_ROTATION = false" in widget and "local ROTATION_SPEED = 0.001" in widget
+    assert "local HORIZONTAL_ROTATION_SIGN = 1" in widget and "local VERTICAL_ROTATION_SIGN = -1" in widget
+    with pytest.raises(ValueError):
+        GraphicsConfiguration(camera_rotation_speed=0)
     with pytest.raises(ValueError):
         GraphicsConfiguration(camera_keys="zq")

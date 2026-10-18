@@ -20,13 +20,23 @@ class GraphicsConfiguration:
     # A borderless window covering the screen; False: a 1600x900 window.
     fullscreen: bool = True
     # Four keys moving the camera forward, left, back and right (Shift: faster), for example "zqsd" on an AZERTY
-    # keyboard ("wasd" on QWERTY); the arrows keep working. Rotation stays the game's, with the mouse: Alt and the
-    # middle button to turn, Ctrl and the wheel to tilt. None leaves the game's keys alone.
+    # keyboard ("wasd" on QWERTY); the arrows keep working. None leaves the game's keys alone.
     camera_keys: str | None = "zqsd"
+    # Hold the right mouse button and move the mouse to rotate the camera around the point it looks at, as in 3D
+    # editors (Unity, Unreal); for spectators only, who give no orders. The game's own rotation (Alt and the middle
+    # button) keeps working; the wheel zooms.
+    right_button_rotation: bool = True
+    # Radians the camera turns per pixel the mouse moves, with right_button_rotation.
+    camera_rotation_speed: float = 0.003
+    # By default the view follows the mouse (right turns the view right, up tilts it up); these invert each axis.
+    invert_horizontal_rotation: bool = False
+    invert_vertical_rotation: bool = False
     # Close the window this many seconds after the end of the game; None leaves it open.
-    close_delay_seconds: float | None = 5.0
+    close_delay_seconds: float | None = 0.0
 
     def __post_init__(self) -> None:
+        if self.camera_rotation_speed <= 0:
+            raise ValueError(f"camera_rotation_speed must be positive, not {self.camera_rotation_speed}")
         if self.camera_keys is not None and len(self.camera_keys) != 4:
             raise ValueError(f"camera_keys must be four keys (forward, left, back, right), not {self.camera_keys!r}")
 

@@ -81,7 +81,13 @@ so the environment must match its interface (to confirm).
   resolution 0 = desktop) and to lua/graphics_widgets/graphics_settings.lua (copied only with a window: "bind
   <key> moveforward" and "bind Shift+<key> ..."; not Any+: with Alt the engine's moverotate turned the keys into a
   rotation that did not feel like the game's, which rotates with Alt + middle mouse button; quitforce after
-  GameOver). GraphicsConfiguration.show (default False) opens the window; engine.graphics is never None. BAR's
+  GameOver). GraphicsConfiguration.right_button_rotation (default True, user's choice: the 3D-editor convention):
+  the widget takes the right button for spectators (MousePress returns true; layer -1000000 so it comes first in
+  BAR's input order), switches to the Spring camera (viewspring) and changes its state rx (tilt, clamped to
+  0.51-0.99 pi) and ry (turn) by camera_rotation_speed (default 0.003 rad per pixel; 0.005 felt too fast), around
+  the point looked at; signs chosen by the user's test (ry + dx, rx + dy), each axis invertible
+  (invert_horizontal_rotation, invert_vertical_rotation). GraphicsConfiguration.show
+  (default False) opens the window; engine.graphics is never None. BAR's
   keybind profiles may override a KeybindingFile, hence binds sent from a widget. Each team has a controller
   (controllers.py, agreed 2026-10-18: DoNothing, Passive, HoldAndFire, AttackNearest, BuiltInArtificialIntelligence,
   Agent) and a side; a controller gives the engine AI (NullAI for scripted ones), the placed units' states and an

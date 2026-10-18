@@ -65,8 +65,11 @@ ScenarioConfiguration ──► GameConfiguration ──┬──► RunConfigur
 The window is configured in the file too, `engine=EngineConfiguration(graphics=GraphicsConfiguration(...))`:
 `show` (open the window, off by default; the other settings stay in the file when it is off), `sound` (off by
 default), `fullscreen` (a borderless window over the screen, else 1600x900), `camera_keys` (`"zqsd"` by default:
-forward, left, back, right, Shift for faster; rotation stays the game's, Alt + middle mouse button to turn and
-Ctrl + wheel to tilt; `None` keeps the
+forward, left, back, right, Shift for faster), `right_button_rotation` (on by default: hold the right mouse button
+and move the mouse to rotate the camera around the point it looks at, as in 3D editors; spectators give no orders,
+so the button is free; the game's Alt + middle button keeps working), `camera_rotation_speed` (radians per pixel,
+0.003 by default), `invert_horizontal_rotation` and `invert_vertical_rotation` (off by default: the view follows the
+mouse) and, for `camera_keys`, `None` keeps the
 game's arrows) and `close_delay_seconds` (the window closes this long after the end, `None` leaves it open).
 `engine.speed` left to `None` is real time with a window and as fast as possible without; games run one at a time
 with a window.

@@ -146,6 +146,17 @@ def write_graphics_widget(widgets_directory: Path, graphics: GraphicsConfigurati
     text = text.replace('local CAMERA_KEYS = ""\n', f'local CAMERA_KEYS = "{graphics.camera_keys or ""}"\n')
     delay = -1 if graphics.close_delay_seconds is None else graphics.close_delay_seconds
     text = text.replace("local CLOSE_DELAY_SECONDS = -1\n", f"local CLOSE_DELAY_SECONDS = {delay:g}\n")
+    rotation = "true" if graphics.right_button_rotation else "false"
+    text = text.replace("local RIGHT_BUTTON_ROTATION = false\n", f"local RIGHT_BUTTON_ROTATION = {rotation}\n")
+    text = text.replace(
+        "local ROTATION_SPEED = 0.003\n", f"local ROTATION_SPEED = {graphics.camera_rotation_speed:g}\n"
+    )
+    for axis, inverted in (
+        ("HORIZONTAL", graphics.invert_horizontal_rotation),
+        ("VERTICAL", graphics.invert_vertical_rotation),
+    ):
+        sign = -1 if inverted else 1
+        text = text.replace(f"local {axis}_ROTATION_SIGN = 1\n", f"local {axis}_ROTATION_SIGN = {sign}\n")
     (widgets_directory / GRAPHICS_WIDGET.name).write_text(text)
 
 
