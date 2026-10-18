@@ -27,7 +27,7 @@ from beyond_all_reason_environment.combat_environment import (
 )
 from beyond_all_reason_environment.game_extension import extension_game_name, write_game_extension
 from beyond_all_reason_environment.installation import GAME_VERSION
-from beyond_all_reason_environment.scenarios import five_versus_five_minimal, one_versus_one
+from beyond_all_reason_environment.scenarios import five_versus_five, one_versus_one
 
 MAP_SIZE = (6144.0, 4096.0)
 
@@ -190,7 +190,7 @@ def test_observation_counts_left_unset_follow_the_scenario():
     assert NUMBER_OF_ARMOR_TYPES == 15
     one = CombatConfiguration(scenario=one_versus_one).observation
     assert (one.maximum_ally_units, one.maximum_enemy_units, one.maximum_units_per_enemy_allyteam) == (0, 1, 1)
-    five = CombatConfiguration(scenario=five_versus_five_minimal).observation
+    five = CombatConfiguration(scenario=five_versus_five).observation
     assert (five.maximum_ally_units, five.maximum_enemy_units, five.maximum_units_per_enemy_allyteam) == (4, 5, 5)
 
 
@@ -198,7 +198,7 @@ def test_one_observation_configuration_can_serve_several_scenarios():
     shared = ObservationConfiguration(maximum_weapons_per_unit=1)
     CombatConfiguration(scenario=one_versus_one, observation=shared)
     assert shared.maximum_enemy_units is None
-    five = CombatConfiguration(scenario=five_versus_five_minimal, observation=shared).observation
+    five = CombatConfiguration(scenario=five_versus_five, observation=shared).observation
     assert (five.maximum_enemy_units, five.maximum_weapons_per_unit) == (5, 1)
 
 

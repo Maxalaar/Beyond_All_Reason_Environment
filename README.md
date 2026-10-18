@@ -100,7 +100,7 @@ of separate parts, each answering one question:
 | `rewards` | `RewardWeights` | how the agents are rewarded |
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
-Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five_minimal`)
+Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`)
 and only define the scenario part: an experiment, for example a training configuration of the reinforcement
 learning library, chooses the scenario and the other parts.
 
