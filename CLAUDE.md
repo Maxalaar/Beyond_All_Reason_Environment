@@ -86,7 +86,9 @@ so the environment must match its interface (to confirm).
   BAR's input order), switches to the Spring camera (viewspring) and changes its state rx (tilt, clamped to
   0.51-0.99 pi) and ry (turn) by camera_rotation_speed (default 0.003 rad per pixel; 0.005 felt too fast), around
   the point looked at; signs chosen by the user's test (ry + dx, rx + dy), each axis invertible
-  (invert_horizontal_rotation, invert_vertical_rotation). GraphicsConfiguration.show
+  (invert_horizontal_rotation, invert_vertical_rotation). The engine's CamSpringLockCardinalDirections (on by
+  default) froze the rotation over about 18 degrees at each cardinal direction (GetRotationWithCardinalLock, lock
+  width 0.2 x 90 degrees) while ry kept moving: off unless GraphicsConfiguration.lock_cardinal_directions. GraphicsConfiguration.show
   (default False) opens the window; engine.graphics is never None. BAR's
   keybind profiles may override a KeybindingFile, hence binds sent from a widget. Each team has a controller
   (controllers.py, agreed 2026-10-18: DoNothing, Passive, HoldAndFire, AttackNearest, BuiltInArtificialIntelligence,

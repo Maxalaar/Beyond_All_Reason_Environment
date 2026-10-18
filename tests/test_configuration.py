@@ -228,6 +228,11 @@ def test_graphics_come_from_the_file_and_the_command_line_replaces_them():
 def test_graphics_settings_reach_the_engine_and_the_widget(tmp_path):
     settings = engine_settings(GraphicsConfiguration())
     assert (settings["Fullscreen"], settings["WindowBorderless"], settings["Sound"]) == ("0", "1", "0")
+    # The camera does not stop at north, east, south and west while rotating.
+    assert settings["CamSpringLockCardinalDirections"] == "0"
+    assert (
+        engine_settings(GraphicsConfiguration(lock_cardinal_directions=True))["CamSpringLockCardinalDirections"] == "1"
+    )
     assert engine_settings(GraphicsConfiguration(fullscreen=False, sound=True))["XResolutionWindowed"] == "1600"
     write_graphics_widget(tmp_path, GraphicsConfiguration(camera_keys="zqsd", close_delay_seconds=2.5))
     widget = (tmp_path / "graphics_settings.lua").read_text()

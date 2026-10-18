@@ -102,7 +102,11 @@ def engine_settings(graphics: GraphicsConfiguration) -> dict[str, str]:
     else:
         width, height = WINDOW_SIZE
         window = {"Fullscreen": "0", "XResolutionWindowed": str(width), "YResolutionWindowed": str(height)}
-    return {**window, "Sound": "1" if graphics.sound else "0"}
+    return {
+        **window,
+        "Sound": "1" if graphics.sound else "0",
+        "CamSpringLockCardinalDirections": "1" if graphics.lock_cardinal_directions else "0",
+    }
 
 
 def graphical_environment(write_directory: Path, graphics: GraphicsConfiguration) -> dict[str, str]:

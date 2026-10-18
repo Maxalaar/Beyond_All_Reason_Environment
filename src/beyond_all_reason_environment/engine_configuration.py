@@ -31,6 +31,9 @@ class GraphicsConfiguration:
     # By default the view follows the mouse (right turns the view right, up tilts it up); these invert each axis.
     invert_horizontal_rotation: bool = False
     invert_vertical_rotation: bool = False
+    # Hold the rotation for a moment at north, east, south and west (about 18 degrees around each), to line the view
+    # up with the map: the engine's CamSpringLockCardinalDirections, on in the game, off here for a free rotation.
+    lock_cardinal_directions: bool = False
     # Close the window this many seconds after the end of the game; None leaves it open.
     close_delay_seconds: float | None = 0.0
 
