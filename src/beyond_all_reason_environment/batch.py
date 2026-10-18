@@ -33,7 +33,7 @@ SUMMARISED_STATISTICS = [
 
 @dataclass
 class BatchConfiguration:
-    """A series of matches. Configuration files in configurations/ define one, named ``configuration``."""
+    """A series of matches. Configuration files in configurations/matches/ define one, named ``configuration``."""
 
     # Also the name of the results folder: runs/<name>/version_<n>/, a new version at each run.
     name: str
@@ -125,7 +125,7 @@ def load_batch_configuration(path: Path) -> BatchConfiguration:
 
 
 # Used by run_match.py and run_matches.py when no configuration file is given.
-DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "barb_versus_barb.py"
+DEFAULT_CONFIGURATION_FILE = REPOSITORY_ROOT / "configurations" / "matches" / "barb_versus_barb.py"
 # Fields that a command line option cannot replace: they stay in the configuration file.
 NOT_OVERRIDABLE_FIELDS = {"players"}
 
@@ -151,7 +151,7 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         type=Path,
         nargs="?",
         default=DEFAULT_CONFIGURATION_FILE,
-        help=f"Python configuration file, see configurations/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
+        help=f"Python configuration file, see configurations/matches/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
     )
     group = parser.add_argument_group("replace a field of the configuration file")
     for name, annotation in _overridable_fields().items():

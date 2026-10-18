@@ -13,7 +13,7 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any
 
-from .environment_configuration import EnvironmentConfiguration
+from .engine_configuration import EngineConfiguration
 
 CONNECTION_TIMEOUT_SECONDS = 300
 
@@ -21,8 +21,8 @@ CONNECTION_TIMEOUT_SECONDS = 300
 class Environment(ABC):
     """One engine process; episodes are reset inside the running match, without reloading the game."""
 
-    def __init__(self, configuration: EnvironmentConfiguration) -> None:
-        self.configuration = configuration
+    def __init__(self, engine: EngineConfiguration) -> None:
+        self.engine = engine
         self.possible_agents: list[str] = []
         self.agents: list[str] = []
         self.run_directory: Path | None = None
@@ -71,7 +71,7 @@ class Environment(ABC):
                 resource.close()
         self._process = self._connection = self._server = self._reader = None
         self.agents = []
-        if self.run_directory is not None and not self.configuration.keep_run_directory:
+        if self.run_directory is not None and not self.engine.keep_run_directory:
             shutil.rmtree(self.run_directory, ignore_errors=True)
 
     def __enter__(self) -> "Environment":

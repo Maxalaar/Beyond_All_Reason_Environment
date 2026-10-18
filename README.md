@@ -24,26 +24,26 @@ from `flake.nix` the first time a window is opened. `nix develop` still works if
 ```bash
 python scripts/run_match.py                         # one match without graphics, prints the winner
 python scripts/run_match.py --graphical --speed 3   # watch a match in a window (+ and - change the speed)
-python scripts/run_matches.py configurations/barb_versus_barb.py   # several matches, statistics and charts
-python scripts/run_matches.py configurations/barb_versus_barb.py --matches 20 --parallel 2   # replace fields
+python scripts/run_matches.py configurations/matches/barb_versus_barb.py   # several matches, statistics and charts
+python scripts/run_matches.py configurations/matches/barb_versus_barb.py --matches 20 --parallel 2   # replace fields
 python scripts/watch_replay.py runs/barb_versus_barb/version_1/matches/match_000_seed1 --speed 5   # replay a recorded match
 python scripts/plot_run.py runs/barb_versus_barb/version_1          # redraw all charts of a batch, no replay needed
 python scripts/browse_results.py                                    # web interface to browse all results
 ```
 
-`run_matches.py` reads a Python file in `configurations/` that defines
+`run_matches.py` reads a Python file in `configurations/matches/` that defines
 `configuration = BatchConfiguration(...)`: the name of the run, the players, the number of matches,
 how many run in parallel, seeds, map, time limit. Each player keeps its color in every chart. Its `side` is one
 faction (`"Armada"`, `"Cortex"` or `"Legion"`) or a list of them, in which case each match draws one
 (reproducibly from the seed) and `summary.txt` gives its wins per faction. To compare factions, give
 the players different factions; to compare artificial intelligences, give them different `short_name`.
 `map_name` is one map or a list: matches then take the maps in turn, so each map gets the same number of
-matches (see `configurations/factions_by_map_size.py`). Download maps first with
+matches (see `configurations/matches/factions_by_map_size.py`). Download maps first with
 `python scripts/download_game_data.py --map "<name>"`. Copy `barb_versus_barb.py` to start a new experiment;
 the editor completes and type-checks the fields.
 
 Both `run_match.py` and `run_matches.py` take the same configuration file (default:
-`configurations/barb_versus_barb.py`), and any field except `players` can be replaced on the command line with
+`configurations/matches/barb_versus_barb.py`), and any field except `players` can be replaced on the command line with
 `--<field> <value>`, for example `--map_name "Comet Catcher Remake 1.8" --first_seed 7 --no-record_replays`
 (`--help` lists them). `run_match.py` runs one match of the series, `--match_index <i>` (seed `first_seed + i`,
 map `i % number of maps`), and can show it with `--graphical`. Results go to `runs/<name>/`:
@@ -85,29 +85,45 @@ Earlier versions are never modified: a new run of the same configuration goes to
 Measured on a 20-core laptop: about x35 real time for one match alone, x20 each with 4 in parallel,
 about 5 GB of memory per match.
 
-## Micro environment (reinforcement learning)
+## Combat environment (reinforcement learning)
 
-`MicroEnvironment` is a small fight between two groups of units, one agent per unit of team 0, with the
-parallel interface of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces.
-Settings: `MicroScenarioConfiguration` (units of each side, opponent behaviour, episode length, decision
-interval, number of entities seen, commands allowed per unit type, rewards).
+`CombatEnvironment` is a fight between allyteams, one agent per unit of allyteam 0, with the parallel interface
+of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces;
+`CombatMultiAgentEnvironment` wraps it for RLlib (`pip install -e ".[rllib]"`). Its `CombatConfiguration` is made
+of separate parts, each answering one question:
 
-```bash
-python scripts/try_micro_environment.py --policy attack --episodes 5            # check and measure speed
-python scripts/try_micro_environment.py --policy random --opponent hold_and_fire
-python scripts/try_micro_environment.py --policy attack --graphical --speed 2   # watch it
+| Part | Class | Question |
+|---|---|---|
+| `scenario` | `ScenarioConfiguration` | what happens in the game: map, armies, opponent behaviour, start positions, episode length |
+| `observation` | `ObservationConfiguration` | what each agent sees: entity counts (left to `None`, they follow the scenario), weapon slots, terrain grid |
+| `action` | `ActionConfiguration` | what each agent can do: commands per unit type, attack snap radius, decision interval |
+| `rewards` | `RewardWeights` | how the agents are rewarded |
+| `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
+
+Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five_minimal`)
+and only define the scenario part: an experiment, for example a training configuration of the reinforcement
+learning library, chooses the scenario and the other parts.
+
+```python
+from beyond_all_reason_environment.combat_configuration import CombatConfiguration, RewardWeights
+from beyond_all_reason_environment.combat_environment import CombatEnvironment
+from beyond_all_reason_environment.scenarios import one_versus_one
+
+environment = CombatEnvironment(CombatConfiguration(scenario=one_versus_one, rewards=RewardWeights(kill=0.0)))
 ```
 
-- **Observation** of each agent: its own unit (`self`) and the `maximum_entities_seen` nearest units
-  (`entities`, with `entity_mask`), positions as fractions of the map plus scale features (map size, distance
-  covered per decision, weapon and sight ranges as fractions of the map), and `command_mask`.
+```bash
+python scripts/try_combat_environment.py --policy attack --episodes 5            # check and measure speed
+python scripts/try_combat_environment.py --policy random --opponent hold_and_fire
+python scripts/try_combat_environment.py --policy attack --graphical --speed 2   # watch it
+python scripts/try_combat_multi_agent_environment.py                              # through the RLlib wrapper
+```
+
 - **Action**: `{"command": index in COMMANDS, "target": [x, z]}` with `(x, z)` a point of the map in `[0, 1]²`;
   commands: continue, move, fight (attack-move), attack (the enemy nearest to the point), stop.
-- **How it runs**: one engine process; episodes reset inside the match. A small game extension adds a widget,
-  which exchanges observations and actions with Python over a socket while the simulation waits, and a gadget,
-  which spawns the units and gives the orders. Actions take effect about one decision later (32 frames, a little
-  more when the engine server runs ahead); each observation shows the order the unit is executing.
-- About 160 steps per second with 5 against 5 (one step is one decision of every agent, about 1 game second).
+- **How it runs**: one engine process; episodes reset inside the match. A native Skirmish AI (BridgeAI) exchanges
+  observations and actions with Python over a socket while the simulation waits, and a gadget of a small game
+  extension spawns the units at each reset.
 
 ## Analysis
 

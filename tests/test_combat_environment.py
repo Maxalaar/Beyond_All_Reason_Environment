@@ -6,9 +6,17 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from beyond_all_reason_environment.combat_configuration import COMMANDS, AllyteamConfiguration, CombatConfiguration
+from beyond_all_reason_environment.combat_configuration import (
+    COMMANDS,
+    ActionConfiguration,
+    AllyteamConfiguration,
+    CombatConfiguration,
+    ObservationConfiguration,
+    ScenarioConfiguration,
+)
 from beyond_all_reason_environment.combat_environment import (
     CONTEXT_FEATURES,
+    NUMBER_OF_ARMOR_TYPES,
     CombatEnvironment,
     chassis_feature_names,
     encode_observation,
@@ -19,9 +27,9 @@ from beyond_all_reason_environment.combat_environment import (
 )
 from beyond_all_reason_environment.game_extension import extension_game_name, write_game_extension
 from beyond_all_reason_environment.installation import GAME_VERSION
+from beyond_all_reason_environment.scenarios import five_versus_five_minimal, one_versus_one
 
 MAP_SIZE = (6144.0, 4096.0)
-NUM_ARMOR_TYPES = 3  # small value for tests; armpw's armor_type=2 (index into the one-hot)
 
 
 def unit(identifier: int, team: int, x: float, z: float, health: float = 370.0, command: str = "none") -> dict:
@@ -70,12 +78,10 @@ def raw_observation(units: list[dict]) -> dict:
     }
 
 
-def _config(num_armor_types: int = NUM_ARMOR_TYPES, **kwargs) -> CombatConfiguration:
-    return CombatConfiguration(num_armor_types=num_armor_types, **kwargs)
-
-
 def test_observation_separates_allies_and_enemies_nearest_first():
-    configuration = _config(maximum_ally_units=3, maximum_enemy_units=3)
+    configuration = CombatConfiguration(
+        observation=ObservationConfiguration(maximum_ally_units=3, maximum_enemy_units=3)
+    )
     chassis_names = chassis_feature_names(configuration)
     state_names = state_feature_names()
     # unit 1 = observer (team 0, x=0.40)
@@ -90,10 +96,10 @@ def test_observation_separates_allies_and_enemies_nearest_first():
 
     n_chassis = len(chassis_names)
     n_state = len(state_names)
-    n_weapon = len(weapon_feature_names(NUM_ARMOR_TYPES))
-    max_ally = configuration.maximum_ally_units
-    max_enemy = configuration.maximum_enemy_units
-    max_weapons = configuration.maximum_weapons_per_unit
+    n_weapon = len(weapon_feature_names())
+    max_ally = configuration.observation.maximum_ally_units
+    max_enemy = configuration.observation.maximum_enemy_units
+    max_weapons = configuration.observation.maximum_weapons_per_unit
 
     assert observation["self_chassis"].shape == (n_chassis,)
     assert observation["self_state"].shape == (n_state,)
@@ -133,12 +139,12 @@ def test_observation_separates_allies_and_enemies_nearest_first():
     assert observation["self_chassis"][chassis_names.index("armor_type_0")] == pytest.approx(0.0)
 
     # Weapon damage per armor type (damage_per_type=[10, 20, 50], normalized /1000).
-    damage_idx = weapon_feature_names(NUM_ARMOR_TYPES).index("damage_armor_2")
+    damage_idx = weapon_feature_names().index("damage_armor_2")
     assert observation["self_weapons"][0, damage_idx] == pytest.approx(50.0 / 1000.0)
 
 
 def test_dead_agent_gets_an_empty_observation_and_masks_follow_the_configuration():
-    configuration = _config(commands={"default": ["continue", "move"]})
+    configuration = CombatConfiguration(action=ActionConfiguration(commands={"default": ["continue", "move"]}))
     observation = encode_observation(raw_observation([unit(2, 1, 0.5, 0.5)]), 1, "armpw", configuration, MAP_SIZE)
 
     assert not observation["self_chassis"].any()
@@ -162,26 +168,44 @@ def test_team_reward_counts_damage_kills_and_victory():
 
 
 def test_spawns_put_agents_first_facing_the_opponent():
-    configuration = CombatConfiguration(
+    scenario = ScenarioConfiguration(
         allyteams=[
             AllyteamConfiguration(units={"armpw": 3}),
             AllyteamConfiguration(units={"corak": 2}),
         ]
     )
-    spawns = spawn_positions(configuration, np.random.default_rng(0))
+    spawns = spawn_positions(scenario, np.random.default_rng(0))
 
     assert [spawn["team"] for spawn in spawns] == [0, 0, 0, 1, 1]
     assert all(spawn["x"] < 0.5 for spawn in spawns[:3]) and all(spawn["x"] > 0.5 for spawn in spawns[3:])
-    assert spawns == spawn_positions(configuration, np.random.default_rng(0))
+    assert spawns == spawn_positions(scenario, np.random.default_rng(0))
 
 
 def test_configuration_rejects_unknown_commands():
     with pytest.raises(ValueError):
-        CombatConfiguration(commands={"default": ["dance"]})
+        ActionConfiguration(commands={"default": ["dance"]})
+
+
+def test_observation_counts_left_unset_follow_the_scenario():
+    assert NUMBER_OF_ARMOR_TYPES == 15
+    one = CombatConfiguration(scenario=one_versus_one).observation
+    assert (one.maximum_ally_units, one.maximum_enemy_units, one.maximum_units_per_enemy_allyteam) == (0, 1, 1)
+    five = CombatConfiguration(scenario=five_versus_five_minimal).observation
+    assert (five.maximum_ally_units, five.maximum_enemy_units, five.maximum_units_per_enemy_allyteam) == (4, 5, 5)
+
+
+def test_one_observation_configuration_can_serve_several_scenarios():
+    shared = ObservationConfiguration(maximum_weapons_per_unit=1)
+    CombatConfiguration(scenario=one_versus_one, observation=shared)
+    assert shared.maximum_enemy_units is None
+    five = CombatConfiguration(scenario=five_versus_five_minimal, observation=shared).observation
+    assert (five.maximum_enemy_units, five.maximum_weapons_per_unit) == (5, 1)
 
 
 def test_mobile_and_building_units_are_separated():
-    configuration = _config(maximum_ally_units=2, maximum_enemy_units=2, maximum_ally_buildings=2)
+    configuration = CombatConfiguration(
+        observation=ObservationConfiguration(maximum_ally_units=2, maximum_enemy_units=2, maximum_ally_buildings=2)
+    )
     raw = {
         "episode": 0,
         "episode_frame": 0,
@@ -233,7 +257,7 @@ def test_game_extension_depends_on_the_pinned_game(tmp_path: Path):
 
 @pytest.mark.engine
 def test_attacking_the_nearest_enemy_beats_a_passive_opponent():
-    configuration = CombatConfiguration(maximum_episode_minutes=0.75)
+    configuration = CombatConfiguration(scenario=ScenarioConfiguration(maximum_episode_minutes=0.75))
     state_names = state_feature_names()
     x_idx, z_idx = state_names.index("x"), state_names.index("z")
     with CombatEnvironment(configuration) as environment:

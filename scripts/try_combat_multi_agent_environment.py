@@ -1,6 +1,6 @@
 """Run a few episodes through the RLlib wrapper to verify the interface.
 
-Uses the 1v1 curriculum configuration (passive opponent, terminal reward only).
+Uses the 1v1 curriculum scenario (passive opponent) with the default observation, actions and rewards.
 Each agent picks its allowed commands randomly and targets a random map point.
 
 Examples:
@@ -13,9 +13,9 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment.combat_configuration import COMMANDS
+from beyond_all_reason_environment.combat_configuration import COMMANDS, CombatConfiguration
 from beyond_all_reason_environment.combat_multi_agent_environment import CombatMultiAgentEnvironment
-from beyond_all_reason_environment.scenarios.one_versus_one import CONFIGURATION
+from beyond_all_reason_environment.scenarios import one_versus_one
 
 
 def random_action(observation: dict, random: np.random.Generator) -> dict:
@@ -43,10 +43,11 @@ def main() -> None:
 
     random = np.random.default_rng(arguments.seed)
 
-    env = CombatMultiAgentEnvironment(env_config={"configuration": CONFIGURATION})
-    print(f"agents: {sorted(env._agent_ids)}")
-    print(f"observation_space keys: {sorted(env.observation_space.spaces)}")
-    print(f"action_space: {env.action_space}")
+    env = CombatMultiAgentEnvironment(env_config={"configuration": CombatConfiguration(scenario=one_versus_one)})
+    print(f"agents: {env.possible_agents}")
+    first_agent = env.possible_agents[0]
+    print(f"observation_space keys: {sorted(env.observation_spaces[first_agent].spaces)}")
+    print(f"action_space: {env.action_spaces[first_agent]}")
 
     start = time.monotonic()
     steps = 0

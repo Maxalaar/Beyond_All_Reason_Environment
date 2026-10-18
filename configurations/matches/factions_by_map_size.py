@@ -10,7 +10,7 @@ between them is the faction; start positions are drawn at random from the seed.
 Sizes in map units (512 game units each), from
 https://maps-metadata.beyondallreason.dev/latest/lobby_maps.validated.json. Download the maps first:
     python scripts/download_game_data.py --map "Comet Catcher Remake 1.8" --map "Archsimkats_Valley_V1"
-Run with: python scripts/run_matches.py configurations/factions_by_map_size.py (about an hour).
+Run with: python scripts/run_matches.py configurations/matches/factions_by_map_size.py (about an hour).
 """
 
 from beyond_all_reason_environment import ArtificialIntelligencePlayer, BatchConfiguration

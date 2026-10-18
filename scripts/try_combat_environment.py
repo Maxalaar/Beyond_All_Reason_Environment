@@ -15,8 +15,14 @@ import time
 
 import numpy as np
 
-from beyond_all_reason_environment.combat_configuration import COMMANDS, AllyteamConfiguration, CombatConfiguration
+from beyond_all_reason_environment.combat_configuration import (
+    COMMANDS,
+    AllyteamConfiguration,
+    CombatConfiguration,
+    ScenarioConfiguration,
+)
 from beyond_all_reason_environment.combat_environment import CombatEnvironment, state_feature_names
+from beyond_all_reason_environment.engine_configuration import EngineConfiguration
 
 ATTACK = COMMANDS.index("attack")
 
@@ -49,13 +55,17 @@ def main() -> None:
     arguments = parser.parse_args()
 
     configuration = CombatConfiguration(
-        allyteams=[
-            AllyteamConfiguration(units={"armpw": 5}),
-            AllyteamConfiguration(units={"armpw": 5}, behaviour=arguments.opponent),
-        ],
-        graphical=arguments.graphical,
-        speed=arguments.speed or (1.0 if arguments.graphical else 1000.0),
-        keep_run_directory=arguments.keep_run_directory,
+        scenario=ScenarioConfiguration(
+            allyteams=[
+                AllyteamConfiguration(units={"armpw": 5}),
+                AllyteamConfiguration(units={"armpw": 5}, behaviour=arguments.opponent),
+            ],
+        ),
+        engine=EngineConfiguration(
+            graphical=arguments.graphical,
+            speed=arguments.speed or (1.0 if arguments.graphical else 1000.0),
+            keep_run_directory=arguments.keep_run_directory,
+        ),
     )
     state_names = state_feature_names()
     x_idx, z_idx = state_names.index("x"), state_names.index("z")

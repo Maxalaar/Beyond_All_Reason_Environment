@@ -69,7 +69,7 @@ def test_invalid_batch_configuration_is_rejected(arguments):
 
 
 def test_configuration_files_load():
-    for path in (REPOSITORY_ROOT / "configurations").glob("*.py"):
+    for path in (REPOSITORY_ROOT / "configurations" / "matches").glob("*.py"):
         assert isinstance(load_batch_configuration(path), BatchConfiguration)
 
 
@@ -103,7 +103,7 @@ def test_without_file_the_default_configuration_is_used():
 
 
 def test_command_line_replaces_only_the_fields_given():
-    path = REPOSITORY_ROOT / "configurations" / "barb_versus_barb.py"
+    path = REPOSITORY_ROOT / "configurations" / "matches" / "barb_versus_barb.py"
     file = load_batch_configuration(path)
     configuration = configuration_from_arguments(
         parse([str(path), "--matches", "3", "--maximum_game_minutes", "2.5", "--no-record_replays"])

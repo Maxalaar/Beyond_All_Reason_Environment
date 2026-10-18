@@ -4,8 +4,8 @@ Each player keeps its faction in every match; start positions are drawn at rando
 A player can also get a list of factions, for example side=["Cortex", "Legion"]: each match then
 draws one of them, and summary.txt gives the wins per faction.
 
-Run with: python scripts/run_matches.py configurations/barb_versus_barb.py
-Results go to runs/barb_versus_barb/.
+Run with: python scripts/run_matches.py configurations/matches/armada_versus_cortex.py
+Results go to runs/armada_versus_cortex/.
 """
 
 from beyond_all_reason_environment import ArtificialIntelligencePlayer, BatchConfiguration

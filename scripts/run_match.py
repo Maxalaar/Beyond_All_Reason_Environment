@@ -1,12 +1,12 @@
 """Run one match of a configuration file and print the winner.
 
-The configuration is the one of run_matches.py (default: configurations/barb_versus_barb.py); this script
+The configuration is the one of run_matches.py (default: configurations/matches/barb_versus_barb.py); this script
 runs only one of its matches, the first one unless --match_index is given, and can show it in a window.
 Any field of the file can be replaced on the command line.
 
 Examples:
     python scripts/run_match.py
-    python scripts/run_match.py configurations/factions_by_map_size.py --match_index 2
+    python scripts/run_match.py configurations/matches/factions_by_map_size.py --match_index 2
     python scripts/run_match.py --graphical --speed 3   # watch it; + and - change the speed in game
     python scripts/run_match.py --map_name "Comet Catcher Remake 1.8" --first_seed 7 --no-record_replays
 """

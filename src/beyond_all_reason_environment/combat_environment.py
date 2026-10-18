@@ -56,7 +56,7 @@ Observation of an agent (dictionary of float32 arrays):
                     and LoS visibility (1.0 = visible, 0.0 = fog); the first three channels are
                     constant within an episode, the visibility channel is updated every step
 
-    command_mask   1 for commands the unit type may give (CombatConfiguration.commands)
+    command_mask   1 for commands the unit type may give (ActionConfiguration.commands)
 
     Centralized critic keys (per-allyteam, for CTDE training only):
         allyteam0_units_chassis    (1 + maximum_ally_units, n_chassis)  — self prepended
@@ -70,7 +70,7 @@ Observation of an agent (dictionary of float32 arrays):
         … (same pattern)
 
 Chassis features (static within an episode for a given unit type on a given map):
-    type one-hot, maximum_health_thousands, armor_type one-hot (num_armor_types),
+    type one-hot, maximum_health_thousands, armor_type one-hot (NUMBER_OF_ARMOR_TYPES),
     speed_x/z, weapon_range_x/z, sight_x/z, can_move.
 
 State features (dynamic per step):
@@ -82,7 +82,7 @@ allyteam_id_normalized: allyteam_index / max(n_allyteams - 1, 1).
     Lets the actor distinguish enemy factions when n_allyteams > 2.
 
 Weapon features per slot: range_x/z, reload_decisions, aoe_fraction, is_paralyzed,
-    damage_armor_0 … damage_armor_{num_armor_types-1} (all in thousands).
+    damage_armor_0 … damage_armor_{NUMBER_OF_ARMOR_TYPES-1} (all in thousands).
 
 Positions are fractions of the map in [0, 1]. All other lengths (relative positions, distances,
 speeds, ranges, sight, AoE) are divided by DISTANCE_SCALE (a fixed constant in elmos) so the network
@@ -103,13 +103,13 @@ from datetime import datetime
 import numpy as np
 from gymnasium import spaces
 
-from .combat_configuration import COMMANDS, OPPONENT_STATES, CombatConfiguration
+from .combat_configuration import COMMANDS, OPPONENT_STATES, CombatConfiguration, ScenarioConfiguration
 from .environment import CONNECTION_TIMEOUT_SECONDS, Environment
-from .environment_configuration import FRAMES_PER_SECOND
+from .flat_map import ensure_flat_map
 from .game_extension import write_game_extension
 from .installation import build_bridge_ai
 from .match import RUNS_DIRECTORY, start_engine
-from .start_script import ArtificialIntelligencePlayer, MatchConfiguration
+from .start_script import FRAMES_PER_SECOND, ArtificialIntelligencePlayer, MatchConfiguration
 
 COMMAND_STATES = ("none", "move", "fight", "attack", "stop", "other")
 
@@ -117,6 +117,10 @@ COMMAND_STATES = ("none", "move", "fight", "attack", "stop", "other")
 # Using a stable physical constant instead of the variable map size keeps per-unit features consistent
 # across maps of different sizes.
 DISTANCE_SCALE = 512.0
+
+# Armor types of the pinned game version (installation.GAME_VERSION). The observation space depends on it and is
+# built before the engine starts; _start checks it against the count the engine reports.
+NUMBER_OF_ARMOR_TYPES = 15
 
 CONTEXT_FEATURES = [
     "map_size_x_thousands",
@@ -130,9 +134,9 @@ CONTEXT_FEATURES = [
 def chassis_feature_names(configuration: CombatConfiguration) -> list[str]:
     """Static features of any entity: type, health capacity, armor, mobility and scale."""
     return [
-        *(f"type_{name}" for name in configuration.unit_types),
+        *(f"type_{name}" for name in configuration.scenario.unit_types),
         "maximum_health_thousands",
-        *(f"armor_type_{i}" for i in range(configuration.num_armor_types)),
+        *(f"armor_type_{i}" for i in range(NUMBER_OF_ARMOR_TYPES)),
         "speed_x",
         "speed_z",
         "weapon_range_x",
@@ -162,7 +166,7 @@ def state_feature_names() -> list[str]:
     ]
 
 
-def weapon_feature_names(num_armor_types: int) -> list[str]:
+def weapon_feature_names() -> list[str]:
     """Feature names for a single weapon slot."""
     return [
         "range_x",
@@ -170,7 +174,7 @@ def weapon_feature_names(num_armor_types: int) -> list[str]:
         "reload_decisions",
         "aoe_fraction",
         "is_paralyzed",
-        *(f"damage_armor_{i}" for i in range(num_armor_types)),
+        *(f"damage_armor_{i}" for i in range(NUMBER_OF_ARMOR_TYPES)),
     ]
 
 
@@ -184,9 +188,9 @@ def _chassis_features(
     weapon_range = unit_type.get("weapon_range", 0.0)
     sight = unit_type.get("sight", 0.0)
     return [
-        *(float(unit["unit"] == name) for name in configuration.unit_types),
+        *(float(unit["unit"] == name) for name in configuration.scenario.unit_types),
         unit_type.get("maximum_health", 1.0) / 1000.0,
-        *(float(armor_t == i) for i in range(configuration.num_armor_types)),
+        *(float(armor_t == i) for i in range(NUMBER_OF_ARMOR_TYPES)),
         speed / DISTANCE_SCALE,
         speed / DISTANCE_SCALE,
         weapon_range / DISTANCE_SCALE,
@@ -207,7 +211,7 @@ def _state_features(
     size_x, size_z = map_size
     rel_x_elmos = (unit["x"] - observer["x"]) * size_x
     rel_z_elmos = (unit["z"] - observer["z"]) * size_z
-    interval = configuration.decision_interval_frames
+    interval = configuration.action.decision_interval_frames
     target_x = unit.get("target_x")
     target_z = unit.get("target_z")
     has_target = target_x is not None and target_z is not None
@@ -228,7 +232,7 @@ def _state_features(
     ]
 
 
-def _weapon_features(weapon: dict, decision_interval: int, num_armor_types: int) -> list[float]:
+def _weapon_features(weapon: dict, decision_interval: int) -> list[float]:
     damage_per_type: list[float] = weapon.get("damage_per_type", [])
     return [
         weapon["range"] / DISTANCE_SCALE,
@@ -236,18 +240,20 @@ def _weapon_features(weapon: dict, decision_interval: int, num_armor_types: int)
         weapon["reload"] * FRAMES_PER_SECOND / decision_interval,
         weapon["aoe"] / DISTANCE_SCALE,
         float(weapon.get("paralyzed", 0)),
-        *((float(damage_per_type[i]) / 1000.0 if i < len(damage_per_type) else 0.0) for i in range(num_armor_types)),
+        *(
+            (float(damage_per_type[i]) / 1000.0 if i < len(damage_per_type) else 0.0)
+            for i in range(NUMBER_OF_ARMOR_TYPES)
+        ),
     ]
 
 
 def _unit_weapons(unit_type: dict, configuration: CombatConfiguration) -> tuple[np.ndarray, np.ndarray]:
-    num_at = configuration.num_armor_types
-    n_weapon = len(weapon_feature_names(num_at))
-    max_weapons = configuration.maximum_weapons_per_unit
+    n_weapon = len(weapon_feature_names())
+    max_weapons = configuration.observation.maximum_weapons_per_unit
     matrix = np.zeros((max_weapons, n_weapon), dtype=np.float32)
     mask = np.zeros(max_weapons, dtype=np.float32)
     for slot, weapon in enumerate(unit_type.get("weapons", [])[:max_weapons]):
-        matrix[slot] = _weapon_features(weapon, configuration.decision_interval_frames, num_at)
+        matrix[slot] = _weapon_features(weapon, configuration.action.decision_interval_frames)
         mask[slot] = 1.0
     return matrix, mask
 
@@ -263,8 +269,8 @@ def _context_features(
         size_x / 1000,
         size_z / 1000,
         size_x / size_z,
-        episode_frame / configuration.maximum_episode_frames,
-        frames_since_previous_decision / configuration.decision_interval_frames,
+        episode_frame / configuration.scenario.maximum_episode_frames,
+        frames_since_previous_decision / configuration.action.decision_interval_frames,
     ]
 
 
@@ -278,17 +284,16 @@ def encode_observation(
     """Observation of the agent whose unit is unit_id; zeros (and empty masks) when the unit is dead."""
     n_chassis = len(chassis_feature_names(configuration))
     n_state = len(state_feature_names())
-    max_ally = configuration.maximum_ally_units
-    max_enemy = configuration.maximum_enemy_units
-    max_ally_bld = configuration.maximum_ally_buildings
-    max_enemy_bld = configuration.maximum_enemy_buildings
-    max_weapons = configuration.maximum_weapons_per_unit
-    num_at = configuration.num_armor_types
-    n_weapon = len(weapon_feature_names(num_at))
-    n_allyteams = len(configuration.allyteams)
+    max_ally = configuration.observation.maximum_ally_units
+    max_enemy = configuration.observation.maximum_enemy_units
+    max_ally_bld = configuration.observation.maximum_ally_buildings
+    max_enemy_bld = configuration.observation.maximum_enemy_buildings
+    max_weapons = configuration.observation.maximum_weapons_per_unit
+    n_weapon = len(weapon_feature_names())
+    n_allyteams = len(configuration.scenario.allyteams)
     n_enemy_allyteams = max(n_allyteams - 1, 1)
-    max_units_per_enemy_at = configuration.maximum_units_per_enemy_allyteam
-    max_bld_per_enemy_at = configuration.maximum_buildings_per_enemy_allyteam
+    max_units_per_enemy_at = configuration.observation.maximum_units_per_enemy_allyteam
+    max_bld_per_enemy_at = configuration.observation.maximum_buildings_per_enemy_allyteam
     max_at0_units = 1 + max_ally  # self prepended before ally units
 
     observation: dict[str, np.ndarray] = {
@@ -318,7 +323,8 @@ def encode_observation(
         "enemy_buildings_weapon_mask": np.zeros((max_enemy_bld, max_weapons), dtype=np.float32),
         "context": np.zeros(len(CONTEXT_FEATURES), dtype=np.float32),
         "command_mask": np.array(
-            [float(command in configuration.allowed_commands(unit_name)) for command in COMMANDS], dtype=np.float32
+            [float(command in configuration.action.allowed_commands(unit_name)) for command in COMMANDS],
+            dtype=np.float32,
         ),
         # Critic keys — allyteam 0: self (row 0) prepended before ally units (rows 1..)
         "allyteam0_units_chassis": np.zeros((max_at0_units, n_chassis), dtype=np.float32),
@@ -528,7 +534,7 @@ def team_reward(
     return float(reward)
 
 
-def spawn_positions(configuration: CombatConfiguration, random: np.random.Generator) -> list[dict]:
+def spawn_positions(scenario: ScenarioConfiguration, random: np.random.Generator) -> list[dict]:
     """One spawn entry per unit across all allyteams, agents (allyteam 0) first.
 
     Allyteams are spread evenly along x; units within each allyteam are spread along z.
@@ -541,13 +547,13 @@ def spawn_positions(configuration: CombatConfiguration, random: np.random.Genera
     With spawn_x_range=None, the classic group_separation/group_spread/spawn_jitter logic is used,
     with allyteams placed at equal intervals of group_separation around the map centre.
     """
-    n_allyteams = len(configuration.allyteams)
+    n_allyteams = len(scenario.allyteams)
     spawns = []
-    x_range = configuration.spawn_x_range
+    x_range = scenario.spawn_x_range
 
     if x_range is not None:
         spread = x_range / (2 * max(n_allyteams - 1, 1))
-        for t, at in enumerate(configuration.allyteams):
+        for t, at in enumerate(scenario.allyteams):
             base_x = t / max(n_allyteams - 1, 1)
             lo = max(0.0, base_x - spread)
             hi = min(1.0, base_x + spread)
@@ -555,22 +561,22 @@ def spawn_positions(configuration: CombatConfiguration, random: np.random.Genera
             for index, name in enumerate(names):
                 x = float(lo if lo == hi else random.uniform(lo, hi))
                 offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
-                jitter_z = float(random.uniform(-1, 1) * configuration.spawn_jitter)
-                z = float(np.clip(0.5 + offset * configuration.group_spread + jitter_z, 0, 1))
+                jitter_z = float(random.uniform(-1, 1) * scenario.spawn_jitter)
+                z = float(np.clip(0.5 + offset * scenario.group_spread + jitter_z, 0, 1))
                 spawns.append({"team": t, "unit": name, "x": x, "z": z})
     else:
-        for t, at in enumerate(configuration.allyteams):
-            centre_x = 0.5 + (t - (n_allyteams - 1) / 2) * configuration.group_separation
+        for t, at in enumerate(scenario.allyteams):
+            centre_x = 0.5 + (t - (n_allyteams - 1) / 2) * scenario.group_separation
             names = [name for name, count in at.units.items() for _ in range(count)]
             for index, name in enumerate(names):
                 offset = (index / (len(names) - 1) - 0.5) if len(names) > 1 else 0.0
-                jitter_x, jitter_z = random.uniform(-1, 1, 2) * configuration.spawn_jitter
+                jitter_x, jitter_z = random.uniform(-1, 1, 2) * scenario.spawn_jitter
                 spawns.append(
                     {
                         "team": t,
                         "unit": name,
                         "x": float(np.clip(centre_x + jitter_x, 0, 1)),
-                        "z": float(np.clip(0.5 + offset * configuration.group_spread + jitter_z, 0, 1)),
+                        "z": float(np.clip(0.5 + offset * scenario.group_spread + jitter_z, 0, 1)),
                     }
                 )
     return spawns
@@ -582,26 +588,26 @@ class CombatEnvironment(Environment):
     metadata = {"name": "beyond_all_reason_combat"}
 
     def __init__(self, configuration: CombatConfiguration | None = None):
-        super().__init__(configuration or CombatConfiguration())
-        self.configuration: CombatConfiguration
+        self.configuration = configuration or CombatConfiguration()
+        super().__init__(self.configuration.engine)
         self.agent_unit_names = [
-            name for name, count in self.configuration.allyteams[0].units.items() for _ in range(count)
+            name for name, count in self.configuration.scenario.allyteams[0].units.items() for _ in range(count)
         ]
         self.possible_agents = [f"unit_{index}" for index in range(len(self.agent_unit_names))]
 
         n_chassis = len(chassis_feature_names(self.configuration))
         n_state = len(state_feature_names())
-        max_ally = self.configuration.maximum_ally_units
-        max_enemy = self.configuration.maximum_enemy_units
-        max_ally_bld = self.configuration.maximum_ally_buildings
-        max_enemy_bld = self.configuration.maximum_enemy_buildings
-        max_weapons = self.configuration.maximum_weapons_per_unit
-        n_weapon = len(weapon_feature_names(self.configuration.num_armor_types))
-        terrain_w, terrain_h = self.configuration.terrain_resolution
-        n_allyteams = len(self.configuration.allyteams)
+        max_ally = self.configuration.observation.maximum_ally_units
+        max_enemy = self.configuration.observation.maximum_enemy_units
+        max_ally_bld = self.configuration.observation.maximum_ally_buildings
+        max_enemy_bld = self.configuration.observation.maximum_enemy_buildings
+        max_weapons = self.configuration.observation.maximum_weapons_per_unit
+        n_weapon = len(weapon_feature_names())
+        terrain_w, terrain_h = self.configuration.observation.terrain_resolution
+        n_allyteams = len(self.configuration.scenario.allyteams)
         max_at0_units = 1 + max_ally
-        max_units_per_enemy_at = self.configuration.maximum_units_per_enemy_allyteam
-        max_bld_per_enemy_at = self.configuration.maximum_buildings_per_enemy_allyteam
+        max_units_per_enemy_at = self.configuration.observation.maximum_units_per_enemy_allyteam
+        max_bld_per_enemy_at = self.configuration.observation.maximum_buildings_per_enemy_allyteam
 
         critic_spaces: dict = {
             "allyteam0_units_chassis": spaces.Box(-np.inf, np.inf, (max_at0_units, n_chassis), np.float32),
@@ -708,6 +714,8 @@ class CombatEnvironment(Environment):
     def _start(self) -> None:
         configuration = self.configuration
         build_bridge_ai()
+        if configuration.scenario.flat_map_squares is not None:
+            ensure_flat_map(configuration.scenario.map_name, *configuration.scenario.flat_map_squares)
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         self.run_directory = RUNS_DIRECTORY / "combat_environments" / f"{timestamp}_{os.getpid()}_{id(self) % 100000}"
         self._server = socket.create_server(("127.0.0.1", 0))
@@ -720,29 +728,29 @@ class CombatEnvironment(Environment):
                 side="Armada",
                 options={
                     "port": str(port),
-                    "decision_interval": str(configuration.decision_interval_frames),
-                    "attack_snap_radius": f"{configuration.attack_snap_radius:g}",
-                    "terrain_w": str(configuration.terrain_resolution[0]),
-                    "terrain_h": str(configuration.terrain_resolution[1]),
+                    "decision_interval": str(configuration.action.decision_interval_frames),
+                    "attack_snap_radius": f"{configuration.action.attack_snap_radius:g}",
+                    "terrain_w": str(configuration.observation.terrain_resolution[0]),
+                    "terrain_h": str(configuration.observation.terrain_resolution[1]),
                 },
             ),
             *[
                 ArtificialIntelligencePlayer(short_name="NullAI", version="0.1", side="Armada")
-                for _ in range(1, len(configuration.allyteams))
+                for _ in range(1, len(configuration.scenario.allyteams))
             ],
         ]
         match_configuration = MatchConfiguration(
             players=players,
-            map_name=configuration.map_name,
+            map_name=configuration.scenario.map_name,
             game_version=write_game_extension(self.run_directory),
-            speed=configuration.speed,
+            speed=configuration.engine.speed,
             maximum_game_minutes=1_000_000,
             extra_mod_options={
                 "deathmode": "neverend",
-                "reinforcement_learning_full_vision": "1" if configuration.full_vision else "0",
+                "reinforcement_learning_full_vision": "1" if configuration.scenario.full_vision else "0",
             },
         )
-        self._process = start_engine(match_configuration, self.run_directory, graphical=configuration.graphical)
+        self._process = start_engine(match_configuration, self.run_directory, graphical=configuration.engine.graphical)
         try:
             self._connection, _ = self._server.accept()
         except TimeoutError as error:
@@ -750,14 +758,13 @@ class CombatEnvironment(Environment):
         self._reader = self._connection.makefile("r", encoding="utf-8")
         ready = self._receive()
         self._map_size = (float(ready["map"]["size_x"]), float(ready["map"]["size_z"]))
-        engine_armor_types = int(ready.get("num_armor_types", self.configuration.num_armor_types))
-        if engine_armor_types != self.configuration.num_armor_types:
+        engine_armor_types = int(ready.get("num_armor_types", NUMBER_OF_ARMOR_TYPES))
+        if engine_armor_types != NUMBER_OF_ARMOR_TYPES:
             raise RuntimeError(
-                f"num_armor_types mismatch: engine reports {engine_armor_types}, "
-                f"configuration has {self.configuration.num_armor_types}. "
-                f"Update CombatConfiguration.num_armor_types to match."
+                f"The engine reports {engine_armor_types} armor types, NUMBER_OF_ARMOR_TYPES is "
+                f"{NUMBER_OF_ARMOR_TYPES}: update it in combat_environment.py for this game version."
             )
-        terrain_w, terrain_h = self.configuration.terrain_resolution
+        terrain_w, terrain_h = self.configuration.observation.terrain_resolution
         terrain_msg = self._receive()
         self._terrain[:, :, :3] = np.array(terrain_msg["data"], dtype=np.float32).reshape(terrain_h, terrain_w, 3)
         self._terrain[:, :, 3] = 1.0  # default: full visibility until first step
@@ -798,15 +805,15 @@ class CombatEnvironment(Environment):
             self._start()
         self._episode += 1
         configuration = self.configuration
-        states = [configuration.agent_fire_state, configuration.agent_move_state]
-        for at in configuration.allyteams[1:]:
+        states = [configuration.action.agent_fire_state, configuration.action.agent_move_state]
+        for at in configuration.scenario.allyteams[1:]:
             fire, move = OPPONENT_STATES[at.behaviour]
             states.extend([fire, move])
         self._send(
             {
                 "type": "reset",
                 "episode": self._episode,
-                "spawns": spawn_positions(configuration, self._random),
+                "spawns": spawn_positions(configuration.scenario, self._random),
                 "states": states,
             }
         )
@@ -834,7 +841,7 @@ class CombatEnvironment(Environment):
             if action is None:
                 continue
             command = COMMANDS[int(action["command"])]
-            if command not in self.configuration.allowed_commands(
+            if command not in self.configuration.action.allowed_commands(
                 self.agent_unit_names[self.possible_agents.index(agent)]
             ):
                 command = "continue"
@@ -848,7 +855,7 @@ class CombatEnvironment(Environment):
         self._previous = raw
         alive = {u["id"] for u in raw["units"] if u["team"] == 0}
         enemies_left = any(u["team"] != 0 for u in raw["units"])
-        time_over = raw["episode_frame"] >= self.configuration.maximum_episode_frames
+        time_over = raw["episode_frame"] >= self.configuration.scenario.maximum_episode_frames
 
         observations = self._observations(raw)
         rewards = {agent: reward for agent in self.agents}

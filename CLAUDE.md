@@ -31,7 +31,7 @@ so the environment must match its interface (to confirm).
 
 ## Roadmap (start small)
 - [x] Step 0: `scripts/download_game_data.py`, `scripts/run_match.py` (one match of a configuration headless →
-      winner, `--graphical` to watch), `scripts/run_matches.py configurations/<file>.py`
+      winner, `--graphical` to watch), `scripts/run_matches.py configurations/matches/<file>.py`
       (Python file defining `configuration = BatchConfiguration(...)`; parallel batch, statistics and
       charts into `runs/<name>/`; `batch.py`, `plots.py`). Both take the same file (default barb_versus_barb.py)
       and `--<field> <value>` replaces any field but `players` (generated from the dataclass fields in
@@ -63,9 +63,16 @@ so the environment must match its interface (to confirm).
   receiving actions from the widget through Spring.SendLuaRulesMsg.
 
 ## Micro environment, how it works (learned while building it, 2026-10-16)
-- Code: micro_configuration.py, micro_environment.py, game_extension.py, lua/game_extension/ (gadget
-  reinforcement_learning_scenario.lua, widget reinforcement_learning_bridge.lua), scripts/try_micro_environment.py,
-  tests/test_micro_environment.py (`pytest -m engine` for the end-to-end test).
+- Code (now the combat environment, driven by the native BridgeAI): combat_configuration.py, combat_environment.py,
+  combat_multi_agent_environment.py (RLlib wrapper, extra "rllib"), engine_configuration.py, scenarios/, flat_map.py,
+  game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_combat_environment.py,
+  tests/test_combat_environment.py (`pytest -m engine` for the end-to-end test).
+- Configuration layout (agreed 2026-10-18): CombatConfiguration = scenario (ScenarioConfiguration: map, allyteams,
+  spawns, episode length) + observation + action + rewards + engine. Scenarios (scenarios/<name>.py, variable named
+  like the file) define only the scenario; the experiment (training configuration in Maxalaar_Reinforcement_Learning,
+  configurations/beyond_all_reason/) chooses observation, action and rewards. Observation counts left to None follow
+  the scenario. Armor types are the constant NUMBER_OF_ARMOR_TYPES (checked against the engine at start).
+  Match series (BatchConfiguration, no reinforcement learning) live in configurations/matches/.
 - The game extension (archive "Beyond All Reason Reinforcement Learning 1", depends on the pinned BAR) is written
   into <run>/games/ and is the GameType; its widget keeps LuaSocket (BAR only sandboxes user widgets).
 - Every unsynced -> synced message (LuaRulesMsg, AI commands too) goes through the server, which simulates ahead of

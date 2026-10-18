@@ -1,11 +1,11 @@
 """Run the matches described by a configuration file, in parallel and without graphics, then print statistics.
 
 Examples:
-    python scripts/run_matches.py configurations/barb_versus_barb.py
-    python scripts/run_matches.py configurations/barb_versus_barb.py --matches 20 --parallel 2
+    python scripts/run_matches.py configurations/matches/barb_versus_barb.py
+    python scripts/run_matches.py configurations/matches/barb_versus_barb.py --matches 20 --parallel 2
     python scripts/run_matches.py --map_name "Red Comet Remake 1.8" "Comet Catcher Remake 1.8"
 
-Without a file, configurations/barb_versus_barb.py is used. Any field of the file can be replaced on the
+Without a file, configurations/matches/barb_versus_barb.py is used. Any field of the file can be replaced on the
 command line (--<field> <value>, see --help); the players stay in the file.
 
 Results go to runs/<name>/version_<n>/, where <name> comes from the configuration file; running it again

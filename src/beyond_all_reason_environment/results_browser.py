@@ -386,7 +386,9 @@ def main() -> None:
 
     versions = list_versions()
     if not versions:
-        st.info("No results yet. Run for example: python scripts/run_matches.py configurations/barb_versus_barb.py")
+        st.info(
+            "No results yet. Run for example: python scripts/run_matches.py configurations/matches/barb_versus_barb.py"
+        )
         return
     experiments = sorted({experiment_and_version(path)[0] for path in versions})
     latest = max(versions, key=lambda path: path.stat().st_mtime)
