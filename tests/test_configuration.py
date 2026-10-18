@@ -1,6 +1,7 @@
 """Fast tests that do not start the game engine."""
 
 import argparse
+import base64
 import json
 from pathlib import Path
 
@@ -122,6 +123,11 @@ def test_a_scenario_with_placed_units_is_set_up_by_the_game_extension():
     # AttackNearest fires at will and manoeuvres; the Passive Pawn holds fire and position.
     assert spawns.count("/") == 1 and states == "2,1,0,0"
     assert ";" not in match.extra_mod_options["reinforcement_learning_scenario"]
+    # BAR's scenario option replaces the commanders by a loadout that creates nothing.
+    payload = match.extra_mod_options["scenariooptions"]
+    assert "=" not in payload
+    loadout = json.loads(base64.urlsafe_b64decode(payload + "=" * (-len(payload) % 4)))["unitloadout"]
+    assert [unit["name"] for unit in loadout] == ["reinforcement_learning_placeholder"]
     assert run.match_configuration(0) == match
 
 
@@ -206,15 +212,17 @@ def test_saved_configuration_has_the_values_after_the_command_line(tmp_path):
 
 def test_graphics_come_from_the_file_and_the_command_line_replaces_them():
     headless = configuration_from_arguments(parse([]))
-    assert headless.engine.graphics is None and headless.engine.effective_speed == 1000
-    watched = configuration_from_arguments(parse(["--graphical", "--sound", "--camera_keys", "wasd"]))
-    assert watched.engine.graphics == GraphicsConfiguration(sound=True, camera_keys="wasd")
+    assert not headless.engine.graphics.show and headless.engine.effective_speed == 1000
+    watched = configuration_from_arguments(parse(["--show", "--sound", "--camera_keys", "wasd"]))
+    assert watched.engine.graphics == GraphicsConfiguration(show=True, sound=True, camera_keys="wasd")
     # Real time with a window, one game at a time.
     assert (watched.engine.effective_speed, watched.games_at_once) == (1.0, 1)
     assert watched.match_configuration(0).speed == 1.0
     path = REPOSITORY_ROOT / "configurations" / "runs" / "one_versus_one_attack_nearest.py"
-    assert load_run_configuration(path).engine.graphics is not None
-    assert configuration_from_arguments(parse([str(path), "--no-graphical"])).engine.graphics is None
+    assert load_run_configuration(path).engine.graphics.show
+    # The window is off, its settings stay.
+    hidden = configuration_from_arguments(parse([str(path), "--no-show"])).engine.graphics
+    assert (hidden.show, hidden.camera_keys) == (False, "zqsd")
 
 
 def test_graphics_settings_reach_the_engine_and_the_widget(tmp_path):

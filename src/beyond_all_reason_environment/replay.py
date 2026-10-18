@@ -28,7 +28,7 @@ def watch_replay(replay_path: Path, speed: float = 1.0) -> None:
         widget = REPLAY_SPEED_WIDGET.read_text().replace("local SPEED = 1\n", f"local SPEED = {speed:g}\n")
         (widgets_directory / REPLAY_SPEED_WIDGET.name).write_text(widget)
         # Camera keys as in a live game; the window stays open at the end of the replay.
-        graphics = GraphicsConfiguration(close_delay_seconds=None)
+        graphics = GraphicsConfiguration(show=True, close_delay_seconds=None)
         write_graphics_widget(widgets_directory, graphics)
         # Matches of scenarios with placed units were played with the game extension.
         write_game_extension(write_directory)

@@ -12,14 +12,16 @@ GRAPHICAL_SPEED = 1.0
 
 @dataclass
 class GraphicsConfiguration:
-    """A window to watch the game (the graphical engine binary)."""
+    """The window to watch the game (the graphical engine binary): opened only when ``show`` is True, so the other
+    settings stay written in the configuration when the window is off."""
 
+    show: bool = False
     sound: bool = False
     # A borderless window covering the screen; False: a 1600x900 window.
     fullscreen: bool = True
-    # Four keys moving the camera forward, left, back and right, for example "zqsd" on an AZERTY keyboard ("wasd" on
-    # QWERTY); with Alt held, the same keys rotate and tilt the camera. None keeps the game's keys (arrows; Alt and
-    # the middle mouse button rotate).
+    # Four keys moving the camera forward, left, back and right (Shift: faster), for example "zqsd" on an AZERTY
+    # keyboard ("wasd" on QWERTY); the arrows keep working. Rotation stays the game's, with the mouse: Alt and the
+    # middle button to turn, Ctrl and the wheel to tilt. None leaves the game's keys alone.
     camera_keys: str | None = "zqsd"
     # Close the window this many seconds after the end of the game; None leaves it open.
     close_delay_seconds: float | None = 5.0
@@ -33,10 +35,10 @@ class GraphicsConfiguration:
 class EngineConfiguration:
     """Speed, window, and what the engine leaves in the run folder."""
 
-    # Multiple of real time; None: HEADLESS_SPEED without graphics, GRAPHICAL_SPEED with (+ and - change it in game).
+    # Multiple of real time; None: HEADLESS_SPEED without a window, GRAPHICAL_SPEED with (+ and - change it in game).
     speed: float | None = None
-    # None: no window (the headless engine binary).
-    graphics: GraphicsConfiguration | None = field(default=None)
+    # The window; graphics.show False: none (the headless engine binary).
+    graphics: GraphicsConfiguration = field(default_factory=GraphicsConfiguration)
     # Keep runs/reinforcement_learning_environments/<run>/ (start script, engine log) after the environment closes,
     # for debugging.
     keep_run_directory: bool = False
@@ -45,4 +47,4 @@ class EngineConfiguration:
     def effective_speed(self) -> float:
         if self.speed is not None:
             return self.speed
-        return HEADLESS_SPEED if self.graphics is None else GRAPHICAL_SPEED
+        return GRAPHICAL_SPEED if self.graphics.show else HEADLESS_SPEED

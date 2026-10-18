@@ -105,9 +105,9 @@ def engine_settings(graphics: GraphicsConfiguration) -> dict[str, str]:
     return {**window, "Sound": "1" if graphics.sound else "0"}
 
 
-def graphical_environment(write_directory: Path, graphics: GraphicsConfiguration | None = None) -> dict[str, str]:
+def graphical_environment(write_directory: Path, graphics: GraphicsConfiguration) -> dict[str, str]:
     """Environment and window settings for the graphical engine binary, writing into ``write_directory``."""
-    settings = engine_settings(graphics or GraphicsConfiguration())
+    settings = engine_settings(graphics)
     (write_directory / "springsettings.cfg").write_text(
         "".join(f"{key} = {value}\n" for key, value in settings.items())
     )
@@ -154,9 +154,10 @@ def start_engine(
 ) -> subprocess.Popen:
     """Prepare ``run_directory`` (widgets, game extension, start script) and start the engine on it without waiting.
 
-    With ``graphics`` a window shows the game. The engine output goes to engine_output.log in the run folder.
+    With ``graphics.show`` a window shows the game. The engine output goes to engine_output.log in the run folder.
     """
-    executable = HEADLESS_EXECUTABLE if graphics is None else GRAPHICAL_EXECUTABLE
+    shown = graphics is not None and graphics.show
+    executable = GRAPHICAL_EXECUTABLE if shown else HEADLESS_EXECUTABLE
     if not executable.exists():
         raise FileNotFoundError("Engine missing: run scripts/download_game_data.py first.")
     run_directory.mkdir(parents=True, exist_ok=True)
@@ -165,8 +166,8 @@ def start_engine(
     widgets_directory.mkdir(parents=True, exist_ok=True)
     for widget in LUA_WIDGETS_DIRECTORY.glob("*.lua"):
         shutil.copy(widget, widgets_directory)
-    if graphics is not None:
-        write_graphics_widget(widgets_directory, graphics)
+    if shown:
+        write_graphics_widget(widgets_directory, graphics)  # pyright: ignore[reportArgumentType]
 
     if configuration.game_version == extension_game_name():
         write_game_extension(run_directory)
@@ -177,8 +178,8 @@ def start_engine(
     script_path.write_text(build_start_script(configuration))
 
     # The run folder is the write directory (logs, results); the shared game_data folder is read-only.
-    if graphics is not None:
-        environment = graphical_environment(run_directory, graphics)
+    if shown:
+        environment = graphical_environment(run_directory, graphics)  # pyright: ignore[reportArgumentType]
     else:
         environment = {**os.environ, "SPRING_DATADIR": str(GAME_DATA_DIRECTORY)}
     with open(run_directory / "engine_output.log", "w") as log_file:
@@ -197,7 +198,7 @@ def run_match(
     run_directory: Path | None = None,
     graphics: GraphicsConfiguration | None = None,
 ) -> MatchResult:
-    """Run a match to the end. With ``graphics`` a window shows it, at ``configuration.speed``."""
+    """Run a match to the end. With ``graphics.show`` a window shows it, at ``configuration.speed``."""
     if run_directory is None:
         timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
         run_directory = RUNS_DIRECTORY / f"{timestamp}_seed{configuration.seed}"

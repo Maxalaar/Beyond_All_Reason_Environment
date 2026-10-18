@@ -20,24 +20,37 @@ local CAMERA_ACTIONS = { "moveforward", "moveleft", "moveback", "moveright" }
 
 local gameOverTimer = nil
 
--- "Any+" also matches with modifiers held: with Alt (moverotate), the Spring camera rotates and tilts instead.
+-- The key alone moves the camera, Shift+key moves it faster (movefast is bound to Any+shift by the engine). Other
+-- modifiers keep their game bindings; rotation stays the game's, with the mouse.
 local function bindCameraKeys()
 	if #CAMERA_KEYS ~= 4 then
 		return
 	end
 	for index, action in ipairs(CAMERA_ACTIONS) do
 		local key = CAMERA_KEYS:sub(index, index)
-		Spring.SendCommands("unbindkeyset Any+" .. key, "bind Any+" .. key .. " " .. action)
+		for _, keyset in ipairs({ key, "Shift+" .. key }) do
+			Spring.SendCommands("unbindkeyset " .. keyset, "bind " .. keyset .. " " .. action)
+		end
+	end
+end
+
+-- BAR opens its mission briefing for games with scenariooptions (set to avoid commanders, game.py), and hides the
+-- rest of the interface while it is open: close it, there is no mission.
+local function closeMissionInfo()
+	if WG.missioninfo and WG.missioninfo.toggle then
+		WG.missioninfo.toggle(false)
 	end
 end
 
 function widget:Initialize()
 	bindCameraKeys()
+	closeMissionInfo()
 end
 
 -- The game's key binding profile may load after this widget: bind again once the game runs.
 function widget:GameStart()
 	bindCameraKeys()
+	closeMissionInfo()
 end
 
 function widget:GameOver()

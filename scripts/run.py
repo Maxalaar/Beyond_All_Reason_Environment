@@ -1,14 +1,14 @@
 """Run the games described by a configuration file (one, or a series in parallel), then print statistics.
 
 Examples:
-    python scripts/run.py configurations/runs/one_versus_one_attack_nearest.py --graphical   # watch one game
+    python scripts/run.py configurations/runs/one_versus_one_attack_nearest.py               # watch one game
     python scripts/run.py configurations/runs/barb_versus_barb.py --matches 20 --parallel 2
     python scripts/run.py configurations/runs/factions_by_map_size.py --match_index 2         # only game 2 of the run
     python scripts/run.py --map_name "Red Comet Remake 1.8" "Comet Catcher Remake 1.8" --maximum_game_minutes 30
 
 Without a file, configurations/runs/barb_versus_barb.py is used. The fields of the run, of its scenario, of its engine
 and of its window can be replaced on the command line (--<field> <value>, see --help); the teams and their
-controllers stay in the file. With a window (--graphical, or engine.graphics in the file), games run one at a time.
+controllers stay in the file. With a window (--show, or engine.graphics.show in the file), games run one at a time.
 
 Results go to runs/<name>/version_<n>/, where <name> comes from the configuration file; running it again
 adds version_<n+1>/ next to the earlier ones:

@@ -16,13 +16,17 @@
 --         the first index on; responses are capped near 9 kB, so the answer starts with the next index to ask
 --         for, or -1 when complete: "<next index>|<entries>".
 --
--- 2. A game without Python (run.py, game.game_mod_options): the mod option reinforcement_learning_scenario holds the same spawns and
---    states, "<team>,<unit>,<x>,<z>/...|<t0_fire>,<t0_move>,...", applied once at SETUP_FRAME. Spawns are separated
---    by "/" there because ";" ends a value in the start script.
+-- 2. A game without Python (run.py, game.game_mod_options): the mod option reinforcement_learning_scenario holds the
+--    same spawns and states, "<team>,<unit>,<x>,<z>/...|<t0_fire>,<t0_move>,...", applied once when the game loads
+--    (GamePreload, before the first frame). Spawns are separated by "/" there because ";" ends a value in the start
+--    script.
+--
+-- No commander is created when units are placed: Python also sets BAR's scenariooptions mod option, whose unit
+-- loadout replaces the commanders (game.no_commander_mod_options).
 --
 -- Each reset spawns the new units (x, z as fractions of the map) first, then removes every unit that was there
--- before (commanders at the start of a match) and the wrecks of the previous episode: a team is never left without
--- units, so the game's end condition (deathmode killall in matches) only fires when a side is really eliminated.
+-- before (the previous episode's) and its wrecks: a team is never left without units, so the game's end condition
+-- (deathmode killall in games without Python) only fires when a side is really eliminated.
 -- The states array has 2*N values for N allyteams: fire and move per team index, -1 keeps the unit's default.
 --
 -- Scripted controllers (controllers.py) run here too, in matches and in the environment alike: the mod option
@@ -43,9 +47,6 @@ function gadget:GetInfo()
 end
 
 local modOptions = Spring.GetModOptions()
-
--- Commanders are created at GameStart (game_initial_spawn.lua); the scenario replaces them just after.
-local SETUP_FRAME = 1
 
 local currentEpisode  = -1
 local episodeFeatures = {}  -- wrecks created during the current episode
@@ -170,17 +171,19 @@ for _, entry in ipairs(split(modOptions.reinforcement_learning_controllers or ""
 	end
 end
 
-function gadget:GameFrame(frame)
+-- Like BAR's own loadout (unit_scenario_loadout.lua): the units exist from the first frame on.
+function gadget:GamePreload()
 	local scenario = modOptions.reinforcement_learning_scenario
-	if frame == SETUP_FRAME and scenario and scenario ~= "" then
+	if scenario and scenario ~= "" and Spring.GetGameFrame() < 1 then
 		local fields = split(scenario, "|")
 		placeScenario(fields[1], "/", fields[2])
 		currentEpisode = 0
 	end
-	if frame > SETUP_FRAME then
-		for _, scripted in ipairs(scriptedTeams) do
-			scripted.script(scripted.teamID, frame, unpack(scripted.parameters))
-		end
+end
+
+function gadget:GameFrame(frame)
+	for _, scripted in ipairs(scriptedTeams) do
+		scripted.script(scripted.teamID, frame, unpack(scripted.parameters))
 	end
 end
 

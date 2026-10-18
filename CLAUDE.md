@@ -76,10 +76,12 @@ so the environment must match its interface (to confirm).
   ReinforcementLearningEnvironment). Scenarios (scenarios/<name>.py, variable named like the file) define only the situation; the
   experiment (training configuration in Maxalaar_Reinforcement_Learning, configurations/beyond_all_reason/)
   chooses the controllers, observation, action and rewards. EngineConfiguration(speed None = 1000 headless, 1 with
-  a window; graphics: GraphicsConfiguration | None) is shared; GraphicsConfiguration (sound off, borderless
+  a window; graphics: GraphicsConfiguration) is shared; GraphicsConfiguration (show off, sound off, borderless
   fullscreen, camera_keys "zqsd", close_delay_seconds 5) goes to springsettings.cfg (Sound, WindowBorderless,
   resolution 0 = desktop) and to lua/graphics_widgets/graphics_settings.lua (copied only with a window: "bind
-  Any+<key> moveforward..." so Alt+keys rotate the Spring camera (moverotate), quitforce after GameOver). BAR's
+  <key> moveforward" and "bind Shift+<key> ..."; not Any+: with Alt the engine's moverotate turned the keys into a
+  rotation that did not feel like the game's, which rotates with Alt + middle mouse button; quitforce after
+  GameOver). GraphicsConfiguration.show (default False) opens the window; engine.graphics is never None. BAR's
   keybind profiles may override a KeybindingFile, hence binds sent from a widget. Each team has a controller
   (controllers.py, agreed 2026-10-18: DoNothing, Passive, HoldAndFire, AttackNearest, BuiltInArtificialIntelligence,
   Agent) and a side; a controller gives the engine AI (NullAI for scripted ones), the placed units' states and an
@@ -100,11 +102,16 @@ so the environment must match its interface (to confirm).
   alliance from sight ranges (the engine LOS map exists only for the BridgeAI's alliance). The reset observation
   still lists the units the reset destroyed (commanders, previous episode) for one frame: ReinforcementLearningEnvironment keeps
   only the spawned ones (before 2026-10-18 the initial health, hence the reward scale, counted the commanders).
-- Placed units in a match (no Python): the gadget reads mod option reinforcement_learning_scenario
-  ("team,unit,x,z/...|states", "/" because ";" ends a start-script value) at frame 1, spawns the units, then removes
-  the commanders (spawn first, so game_end never sees an empty team); deathmode=killall. editor_sandbox=1 would skip
-  commanders but also disables game_end, so it is not used. Matches with placed units or full vision use the game
-  extension as GameType (start_engine writes it; replay.py too).
+- Placed units in a game without Python: the gadget reads mod option reinforcement_learning_scenario
+  ("team,unit,x,z/...|states", "/" because ";" ends a start-script value) in GamePreload and spawns the units;
+  deathmode=killall. No commander at all (since 2026-10-18, before they were spawned then destroyed, and their spawn
+  effects still showed): with placed units, games and the environment set BAR's scenariooptions (game.py
+  no_commander_mod_options: base64url JSON without padding, unitloadout = one placeholder entry naming no unit,
+  disablefactionpicker), so game_initial_spawn.lua spawns the loadout instead of commanders and
+  unit_scenario_loadout.lua creates nothing. Side effects of scenariooptions in BAR's interface: the Mission Info
+  panel opens and hides the rest of the interface (graphics_settings.lua closes it), the top bar hides the changelog
+  and team stats buttons. editor_sandbox=1 would also skip commanders but disables game_end. Games with placed units,
+  full vision or scripted controllers use the game extension as GameType (start_engine writes it; replay.py too).
 - BARb with only placed units (one_versus_one with BARb, 2026-10-18): it mostly leaves its Pawn idle (no damage in 6
   minutes, once 54 damage just before 2 minutes, same seed): not a useful baseline for unit-only scenarios.
 - The game extension (archive "Beyond All Reason Reinforcement Learning 1", depends on the pinned BAR) is written

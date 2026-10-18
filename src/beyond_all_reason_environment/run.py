@@ -45,7 +45,7 @@ class RunConfiguration:
     # The scenario of each game (map(s), teams, how they start, time limit; see scenarios/) and who plays each team.
     game: GameConfiguration
     matches: int = 1
-    # Games at the same time, about 5 GB of memory each; one at a time with graphics.
+    # Games at the same time, about 5 GB of memory each; one at a time with a window.
     parallel: int = 4
     # Game i uses seed first_seed + i.
     first_seed: int = 1
@@ -53,7 +53,7 @@ class RunConfiguration:
     record_replays: bool = False
     # Keep everything the engine writes in each game folder (about 5 MB), for debugging.
     keep_engine_files: bool = False
-    # Speed and window (engine.graphics: None without graphics).
+    # Speed and window (engine.graphics.show to watch the games).
     engine: EngineConfiguration = field(default_factory=EngineConfiguration)
 
     def __post_init__(self) -> None:
@@ -74,8 +74,8 @@ class RunConfiguration:
 
     @property
     def games_at_once(self) -> int:
-        """Games run at the same time: ``parallel``, or one with graphics (one window at a time)."""
-        return 1 if self.engine.graphics is not None else self.parallel
+        """Games run at the same time: ``parallel``, or one with a window (one window at a time)."""
+        return 1 if self.engine.graphics.show else self.parallel
 
     def match_configurations(self) -> list[MatchConfiguration]:
         """One configuration per game; teams with several factions get one drawn from their list."""
@@ -174,7 +174,7 @@ def _overridable_fields() -> dict[str, tuple[str, object]]:
 
 def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
     """The configuration file, optional, and one --<field> option per field to replace: of the run, of its
-    scenario, of its engine and of its window. --graphical opens a window (default GraphicsConfiguration).
+    scenario, of its engine and of its window (--show opens the window).
 
     Options take the exact field names (--map_name). Booleans also have a --no-<field> form; map_name takes
     one map or several.
@@ -187,12 +187,6 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
         help=f"Python configuration file, see configurations/runs/ (default: {DEFAULT_CONFIGURATION_FILE.name})",
     )
     group = parser.add_argument_group("replace a field of the configuration file (run, scenario, engine, window)")
-    group.add_argument(
-        "--graphical",
-        action=argparse.BooleanOptionalAction,
-        default=None,
-        help="watch the games in a window (engine.graphics); --no-graphical runs without",
-    )
     for name, (_, annotation) in _overridable_fields().items():
         options: dict = {"dest": f"override_{name}", "default": None}
         if annotation is bool:
@@ -221,11 +215,7 @@ def configuration_from_arguments(arguments: argparse.Namespace) -> RunConfigurat
         overrides[owner][name] = value[0] if isinstance(value, list) and len(value) == 1 else value
     # replace() runs __post_init__ again, so replaced values are checked like the ones of the file.
     engine = configuration.engine
-    graphics = engine.graphics
-    if arguments.graphical is not None:
-        graphics = (graphics or GraphicsConfiguration()) if arguments.graphical else None
-    if graphics is not None:
-        graphics = replace(graphics, **overrides["graphics"])
+    graphics = replace(engine.graphics, **overrides["graphics"])
     engine = replace(engine, graphics=graphics, **overrides["engine"])
     game = replace(configuration.game, scenario=replace(configuration.game.scenario, **overrides["scenario"]))
     return replace(configuration, game=game, engine=engine, **overrides["run"])

@@ -10,8 +10,8 @@ Examples:
     python scripts/try_reinforcement_learning_environment.py --policy random --opponent HoldAndFire
     python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --opponent AttackNearest
     python scripts/try_reinforcement_learning_environment.py --opponent Agent   # self-play: the policy plays both sides
-    python scripts/try_reinforcement_learning_environment.py --policy attack --graphical --speed 2   # watch it
-    python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --graphical --speed 2
+    python scripts/try_reinforcement_learning_environment.py --policy attack --show --speed 2   # watch it
+    python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --show --speed 2
 """
 
 import argparse
@@ -66,8 +66,8 @@ def main() -> None:
     parser.add_argument("--episodes", type=int, default=3)
     parser.add_argument("--scenario", choices=["five_versus_five", "one_versus_one"], default="five_versus_five")
     parser.add_argument("--opponent", choices=sorted(OPPONENTS), default="Passive", help="controller of the opponents")
-    parser.add_argument("--graphical", action="store_true")
-    parser.add_argument("--speed", type=float, default=None, help="with --graphical, multiple of real time")
+    parser.add_argument("--show", action="store_true", help="watch the episodes in a window")
+    parser.add_argument("--speed", type=float, default=None, help="multiple of real time (default: 1 with --show)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--keep-run-directory", action="store_true", help="keep the engine log after the run")
     arguments = parser.parse_args()
@@ -79,7 +79,7 @@ def main() -> None:
         game=GameConfiguration(scenario, controllers),
         engine=EngineConfiguration(
             speed=arguments.speed,
-            graphics=GraphicsConfiguration() if arguments.graphical else None,
+            graphics=GraphicsConfiguration(show=arguments.show),
             keep_run_directory=arguments.keep_run_directory,
         ),
     )

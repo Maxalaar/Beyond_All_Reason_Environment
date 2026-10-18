@@ -59,8 +59,10 @@ ScenarioConfiguration ──► GameConfiguration ──┬──► RunConfigur
 | `Agent()` | the agents of the reinforcement learning environment, played from Python (any number of teams: several for self-play) |
 
 The window is configured in the file too, `engine=EngineConfiguration(graphics=GraphicsConfiguration(...))`:
-`sound` (off by default), `fullscreen` (a borderless window over the screen, else 1600x900), `camera_keys`
-(`"zqsd"` by default: forward, left, back, right; with Alt held they rotate and tilt the camera; `None` keeps the
+`show` (open the window, off by default; the other settings stay in the file when it is off), `sound` (off by
+default), `fullscreen` (a borderless window over the screen, else 1600x900), `camera_keys` (`"zqsd"` by default:
+forward, left, back, right, Shift for faster; rotation stays the game's, Alt + middle mouse button to turn and
+Ctrl + wheel to tilt; `None` keeps the
 game's arrows) and `close_delay_seconds` (the window closes this long after the end, `None` leaves it open).
 `engine.speed` left to `None` is real time with a window and as fast as possible without; games run one at a time
 with a window.
@@ -79,7 +81,7 @@ the editor completes and type-checks the fields.
 `scripts/run.py` takes a file of `configurations/runs/` (default: `barb_versus_barb.py`); the simple fields of the
 run, of its scenario, of its engine and of its window can be replaced on the command line with `--<field> <value>`,
 for example `--map_name "Comet Catcher Remake 1.8" --maximum_game_minutes 30 --first_seed 7 --no-record_replays`,
-`--graphical` / `--no-graphical`, `--sound` (`--help` lists them). `--match_index <i>` runs only game i of the run
+`--show` / `--no-show`, `--sound` (`--help` lists them). `--match_index <i>` runs only game i of the run
 (seed `first_seed + i`, map `i % number of maps`). Results go to `runs/<name>/`:
 
 ```
@@ -165,7 +167,7 @@ python scripts/try_reinforcement_learning_environment.py --policy attack --episo
 python scripts/try_reinforcement_learning_environment.py --policy random --opponent HoldAndFire
 python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --opponent AttackNearest   # an opponent that attacks
 python scripts/try_reinforcement_learning_environment.py --opponent Agent   # self-play: the same policy plays both sides
-python scripts/try_reinforcement_learning_environment.py --policy attack --graphical --speed 2   # watch it
+python scripts/try_reinforcement_learning_environment.py --policy attack --show --speed 2   # watch it
 python scripts/try_ray_multi_agent_environment.py                              # through the RLlib wrapper
 ```
 

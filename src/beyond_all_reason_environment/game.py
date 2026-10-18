@@ -5,6 +5,8 @@ environment (ReinforcementLearningEnvironmentConfiguration), where the teams wit
 from Python.
 """
 
+import base64
+import json
 from dataclasses import dataclass, replace
 
 import numpy as np
@@ -73,6 +75,24 @@ def controller_mod_options(game: GameConfiguration) -> dict[str, str]:
     return {"reinforcement_learning_controllers": "/".join(scripts)} if scripts else {}
 
 
+# Names no unit: BAR's loadout gadget (unit_scenario_loadout.lua) skips it, so the loadout creates nothing.
+LOADOUT_PLACEHOLDER = "reinforcement_learning_placeholder"
+
+
+def no_commander_mod_options() -> dict[str, str]:
+    """BAR's own scenario mod option, so that no commander is created: game_initial_spawn.lua spawns a unit loadout
+    instead of the commanders, without their spawn effects, and the game extension's gadget places the scenario's
+    units. The loadout only holds a placeholder: BAR wants positions in game units, the map size is known only in the
+    game. Encoded as BAR expects (modoption_payload.lua: base64url of JSON; padding is optional there, and dropped
+    because "=" is risky in a start-script value). The faction picker is turned off, there is no commander to pick.
+    """
+    payload = {
+        "unitloadout": [{"name": LOADOUT_PLACEHOLDER, "x": 0, "z": 0, "rot": 0, "team": 0}],
+        "disablefactionpicker": True,
+    }
+    return {"scenariooptions": base64.urlsafe_b64encode(json.dumps(payload).encode()).decode().rstrip("=")}
+
+
 def game_mod_options(game: GameConfiguration, seed: int) -> dict[str, str]:
     """Mod options that make the game extension's gadget set the game up without Python.
 
@@ -92,4 +112,4 @@ def game_mod_options(game: GameConfiguration, seed: int) -> dict[str, str]:
     spawns_text = "/".join(f"{spawn['team']},{spawn['unit']},{spawn['x']:.6f},{spawn['z']:.6f}" for spawn in spawns)
     options["reinforcement_learning_scenario"] = f"{spawns_text}|{','.join(map(str, states))}"
     options["deathmode"] = "killall"
-    return options
+    return options | no_commander_mod_options()

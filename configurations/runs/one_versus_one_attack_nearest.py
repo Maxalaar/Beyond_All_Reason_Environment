@@ -6,7 +6,7 @@ BuiltInArtificialIntelligence("BARb").
 
 Watch it with: python scripts/run.py configurations/runs/one_versus_one_attack_nearest.py
 Measure it without a window: python scripts/run.py configurations/runs/one_versus_one_attack_nearest.py \
-    --no-graphical --matches 10
+    --no-show --matches 10
 Results go to runs/one_versus_one_attack_nearest/.
 """
 
@@ -27,8 +27,9 @@ configuration = RunConfiguration(
     first_seed=1,
     record_replays=True,
     engine=EngineConfiguration(
-        # speed None: real time with the window (+ and - change it in game), as fast as possible without.
-        speed=None,
-        graphics=GraphicsConfiguration(sound=False, fullscreen=True, camera_keys="zqsd", close_delay_seconds=5.0),
+        speed=10,
+        graphics=GraphicsConfiguration(
+            show=True, sound=False, fullscreen=True, camera_keys="zqsd", close_delay_seconds=5.0
+        ),
     ),
 )
