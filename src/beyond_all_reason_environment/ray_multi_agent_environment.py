@@ -2,12 +2,16 @@
 
 Thin adapter: no business logic, pure delegation. Configuration is passed via
 ``env_config["configuration"]`` (a ReinforcementLearningEnvironmentConfiguration instance);
-falls back to defaults if absent.
+falls back to defaults if absent. A ``render_mode`` in env_config (any value, as RLlib evaluation passes it)
+opens the game window at the graphical speed, like the Godot environments.
 
 All agents share the same observation and action spaces (homogeneous, shared policy).
-``__all__`` in terminations is True when a game-over condition is met (one side wiped
-out); ``__all__`` in truncations is True when the episode ends by time limit only.
+An agent whose unit dies is done on its own; the episode goes on for the others. ``__all__`` is
+set once no agent is left: in truncations when the time limit ended the episode, otherwise in
+terminations (one side wiped out).
 """
+
+from dataclasses import replace
 
 from ray.rllib import MultiAgentEnv
 
@@ -23,6 +27,12 @@ class RayMultiAgentEnvironment(MultiAgentEnv):
         configuration: ReinforcementLearningEnvironmentConfiguration = (env_config or {}).get(
             "configuration"
         ) or ReinforcementLearningEnvironmentConfiguration()
+        if (env_config or {}).get("render_mode") is not None:
+            # Asked to render (e.g. to watch a trained policy): the game window, at the graphical speed.
+            engine = configuration.engine
+            configuration = replace(
+                configuration, engine=replace(engine, speed=None, graphics=replace(engine.graphics, show=True))
+            )
         self._env = ReinforcementLearningEnvironment(configuration)
         self.possible_agents = list(self._env.possible_agents)
         per_agent_obs = self._env.observation_space(self._env.possible_agents[0])
@@ -35,8 +45,10 @@ class RayMultiAgentEnvironment(MultiAgentEnv):
 
     def step(self, action_dict):
         observations, rewards, terminations, truncations, infos = self._env.step(action_dict)
-        terminations["__all__"] = any(terminations.values())
-        truncations["__all__"] = any(truncations.values()) and not terminations["__all__"]
+        # One agent done (its unit died) does not end the episode: only when the environment has no agent left.
+        over = not self._env.agents
+        truncations["__all__"] = over and any(truncations.values())
+        terminations["__all__"] = over and not truncations["__all__"]
         return observations, rewards, terminations, truncations, infos
 
     def close(self):
