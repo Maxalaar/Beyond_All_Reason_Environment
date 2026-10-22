@@ -423,3 +423,18 @@ def test_attacking_the_nearest_enemy_beats_a_passive_opponent():
                     actions[agent] = {"command": COMMANDS.index("continue"), "target": np.zeros(2, np.float32)}
             observations, _, _, _, informations = environment.step(actions)
         assert next(iter(informations.values()))["enemies_alive"] == 0
+
+
+@pytest.mark.engine
+def test_a_reset_right_after_a_reset_starts_a_new_episode():
+    # RLlib resets again without any step in between (evaluation's force_reset); the BridgeAI used to ignore the
+    # second reset and answer it with a decision observation that has no spawned units.
+    configuration = environment_configuration(five_versus_five)
+    with ReinforcementLearningEnvironment(configuration) as environment:
+        environment.reset(seed=0)
+        first_units = set(environment._agent_unit_ids.values())
+        observations, _ = environment.reset()
+        assert set(observations) == set(environment.possible_agents)
+        assert set(environment._agent_unit_ids.values()).isdisjoint(first_units)
+        environment.step({agent: {"command": COMMANDS.index("continue"), "target": np.zeros(2, np.float32)}
+                          for agent in environment.agents})

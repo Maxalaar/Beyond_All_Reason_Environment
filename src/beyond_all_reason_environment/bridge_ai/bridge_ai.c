@@ -534,6 +534,15 @@ static void call_gadget_reset(const char *reset_json) {
     spawned_units[sizeof(spawned_units) - 1] = '\0';
 }
 
+/* Start a new episode from the "reset" message in line[]; its first observation goes on the next frame. */
+static void start_episode(int frame) {
+    call_gadget_reset(line);
+    episode_start_frame = frame;
+    prev_decision_frame = frame;
+    next_decision_frame = frame + decision_interval;
+    pending_reset_obs = 1;
+}
+
 /* ---- Main event handler -------------------------------------------------- */
 
 EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
@@ -585,7 +594,10 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
             send_observation(frame, 0);
             if (!tcp_recv()) { log_msg("[BridgeAI] connection lost"); return -1; }
             char type[32]; jstr(line, "type", type, sizeof(type));
+            if (strcmp(type, "quit") == 0) { log_msg("[BridgeAI] quit"); return -1; }
             if (strcmp(type, "actions") == 0) apply_actions();
+            /* A reset right after a reset (RLlib does it, e.g. evaluation's force_reset): a new episode again. */
+            else if (strcmp(type, "reset") == 0) start_episode(frame);
             break;
         }
 
@@ -605,11 +617,7 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
             if (strcmp(type, "quit") == 0) { log_msg("[BridgeAI] quit"); return -1; }
             if (strcmp(type, "reset") != 0) break;
 
-            call_gadget_reset(line);
-            episode_start_frame = frame;
-            prev_decision_frame = frame;
-            next_decision_frame = frame + decision_interval;
-            pending_reset_obs = 1;
+            start_episode(frame);
             bridge_state = S_RUNNING;
         }
         else if (bridge_state == S_RUNNING) {
@@ -627,11 +635,7 @@ EXPORT(int) handleEvent(int skirmishAIId, int topic, const void *data) {
             if (strcmp(type, "actions") == 0) {
                 apply_actions();
             } else if (strcmp(type, "reset") == 0) {
-                call_gadget_reset(line);
-                episode_start_frame = frame;
-                prev_decision_frame = frame;
-                next_decision_frame = frame + decision_interval;
-                pending_reset_obs = 1;
+                start_episode(frame);
             }
         }
         break;
