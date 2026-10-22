@@ -9,7 +9,7 @@ from .armada_versus_cortex import armada_versus_cortex
 from .armada_versus_cortex_battle import armada_versus_cortex_battle
 from .five_versus_five import five_versus_five
 from .five_versus_five_arena import five_versus_five_arena
-from .five_versus_two_arena import five_versus_two_arena
+from .five_versus_one_to_five_arena import five_versus_one_to_five_arena
 from .one_versus_one import one_versus_one
 
 __all__ = [
@@ -17,6 +17,6 @@ __all__ = [
     "armada_versus_cortex_battle",
     "five_versus_five",
     "five_versus_five_arena",
-    "five_versus_two_arena",
+    "five_versus_one_to_five_arena",
     "one_versus_one",
 ]

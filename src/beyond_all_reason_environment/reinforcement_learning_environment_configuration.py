@@ -141,5 +141,11 @@ class ReinforcementLearningEnvironmentConfiguration:
         for team in scenario.teams:
             if not isinstance(team.side, str):
                 raise ValueError(f"the environment needs one faction per team, not {team.side!r}")
+        for team_index in self.game.agent_teams:
+            if scenario.teams[team_index].has_drawn_units:
+                raise ValueError(
+                    f"team {team_index} is played by the agents: its numbers of units must be fixed (the agents are "
+                    "its units); draw the numbers of the other teams"
+                )
         # replace() makes a copy: an ObservationConfiguration shared by several configurations stays untouched.
         self.observation = self.observation.resolved(self.game)

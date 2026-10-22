@@ -45,7 +45,8 @@ ScenarioConfiguration ──► GameConfiguration ──┬──► RunConfigur
 - `ScenarioConfiguration` (predefined ones in `beyond_all_reason_environment.scenarios`): map, time limit, and the
   teams (`TeamConfiguration`): for each, its faction (`side`), its alliance (`allyteam`: teams with the same number
   are allies; by default each team is alone) and how it starts: normally (a commander), or with placed units
-  (`units`). It says nothing of who plays. Placed units start at random in their team's spawn zone: by default
+  (`units`: unit name -> number, or (minimum, maximum) drawn for each game; the teams of the agents need fixed
+  numbers). It says nothing of who plays. Placed units start at random in their team's spawn zone: by default
   `spawn_depth` (in [0, 1]), the share of the team's alliance band taken from the map edge (the alliances split the
   map width into equal bands: with two, the west and east halves; 1 on both sides gives 50 % / 50 %, 0.2 keeps each
   army in the fifth of its half nearest its edge), or an explicit `spawn_zone=SpawnZone(x_minimum, x_maximum,
@@ -149,7 +150,8 @@ of separate parts, each answering one question:
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
 Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five_arena`: the
-1v1 arena with 5 Pawns per side, `five_versus_two_arena`: the same with 2 Pawns on the east side, `five_versus_five`,
+1v1 arena with 5 Pawns per side, `five_versus_one_to_five_arena`: the same with 1 to 5 Pawns on the east side, drawn
+for each game, `five_versus_five`,
 `armada_versus_cortex`, `armada_versus_cortex_battle`: 300 units per army, bots, vehicles, artillery and aircraft)
 and only define the situation: an experiment, for example a training configuration of
 the reinforcement learning library, chooses the scenario, the controllers and the other parts. Self-play is a game

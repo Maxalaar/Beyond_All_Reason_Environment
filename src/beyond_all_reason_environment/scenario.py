@@ -41,8 +41,9 @@ class TeamConfiguration:
 
     # One faction, or a list: each game of a run then draws one (reproducibly, from the game's seed).
     side: Side | list[Side] = "Armada"
-    # Unit name -> number: the team starts with exactly these units. None: a normal start (commander).
-    units: dict[str, int] | None = None
+    # Unit name -> number: the team starts with exactly these units, or (minimum, maximum): a number drawn uniformly
+    # for each game (each episode of the environment), with the spawn positions. None: a normal start (commander).
+    units: dict[str, int | tuple[int, int]] | None = None
     # Teams with the same allyteam number are allies: they share victory and vision, and never fight each other.
     # None: an alliance of its own. Numbers only group teams; their values do not matter.
     allyteam: int | None = None
@@ -57,6 +58,15 @@ class TeamConfiguration:
     def __post_init__(self) -> None:
         if not 0 <= self.spawn_depth <= 1:
             raise ValueError(f"spawn_depth must be in [0, 1], not {self.spawn_depth}")
+        for name, count in (self.units or {}).items():
+            minimum, maximum = count if isinstance(count, tuple) else (count, count)
+            if not 1 <= minimum <= maximum:
+                raise ValueError(f"{name}: a number of units, or (minimum, maximum) with 1 <= minimum <= maximum")
+
+    @property
+    def has_drawn_units(self) -> bool:
+        """True when the number of some of its units is drawn for each game ((minimum, maximum))."""
+        return any(isinstance(count, tuple) for count in (self.units or {}).values())
 
 
 @dataclass
@@ -110,10 +120,10 @@ class ScenarioConfiguration:
         return sorted({name for team in self.teams for name in team.units or {}})
 
     def units_per_allyteam(self) -> list[int]:
-        """Number of placed units of each alliance."""
+        """Number of placed units of each alliance; the maximum when it is drawn for each game."""
         counts = [0] * self.number_of_allyteams
         for team, allyteam in zip(self.teams, self.allyteams, strict=True):
-            counts[allyteam] += sum((team.units or {}).values())
+            counts[allyteam] += sum(maximum_count(count) for count in (team.units or {}).values())
         return counts
 
     def spawn_zone(self, team_index: int) -> SpawnZone:
@@ -140,16 +150,23 @@ class ScenarioConfiguration:
         return int(self.maximum_game_minutes * 60 * FRAMES_PER_SECOND)
 
 
+def maximum_count(count: int | tuple[int, int]) -> int:
+    """The largest number of units a count of TeamConfiguration.units can give."""
+    return count[1] if isinstance(count, tuple) else count
+
+
 def spawn_positions(scenario: ScenarioConfiguration, random: np.random.Generator) -> list[dict]:
     """One spawn entry per placed unit, in team order: {"team", "unit", "x", "z"}.
 
-    Each unit is drawn uniformly at random in its team's spawn zone (ScenarioConfiguration.spawn_zone), from
-    ``random``: the same seed gives the same positions.
+    Each unit is drawn uniformly at random in its team's spawn zone (ScenarioConfiguration.spawn_zone), and a number
+    of units given as (minimum, maximum) uniformly in it, from ``random``: the same seed gives the same game.
     """
     spawns = []
     for team_index, team in enumerate(scenario.teams):
         zone = scenario.spawn_zone(team_index)
         for name, count in (team.units or {}).items():
+            if isinstance(count, tuple):
+                count = int(random.integers(count[0], count[1] + 1))
             for _ in range(count):
                 x = float(random.uniform(zone.x_minimum, zone.x_maximum))
                 z = float(random.uniform(zone.z_minimum, zone.z_maximum))

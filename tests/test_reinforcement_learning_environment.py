@@ -45,7 +45,7 @@ from beyond_all_reason_environment.scenario import (
     TeamConfiguration,
     spawn_positions,
 )
-from beyond_all_reason_environment.scenarios import five_versus_five, one_versus_one
+from beyond_all_reason_environment.scenarios import five_versus_five, five_versus_one_to_five_arena, one_versus_one
 
 MAP_SIZE = (6144.0, 4096.0)
 
@@ -239,6 +239,26 @@ def test_a_spawn_zone_may_be_a_point():
         SpawnZone(0.6, 0.4)
     with pytest.raises(ValueError):
         TeamConfiguration(spawn_depth=1.5)
+
+
+def test_a_number_of_units_may_be_drawn_for_each_game():
+    random = np.random.default_rng(0)
+    opponents = [
+        sum(spawn["team"] == 1 for spawn in spawn_positions(five_versus_one_to_five_arena, random)) for _ in range(200)
+    ]
+    assert set(opponents) == {1, 2, 3, 4, 5}
+    # The observation is sized for the largest number; the agents' team stays at 5.
+    assert five_versus_one_to_five_arena.units_per_allyteam() == [5, 5]
+    observation = environment_configuration(five_versus_one_to_five_arena, [Agent(), AttackNearest()]).observation
+    assert observation.maximum_enemy_units == 5
+    for count in [(0, 3), (3, 2)]:
+        with pytest.raises(ValueError):
+            TeamConfiguration(units={"armpw": count})
+
+
+def test_the_teams_of_the_agents_need_fixed_numbers_of_units():
+    with pytest.raises(ValueError, match="fixed"):
+        environment_configuration(five_versus_one_to_five_arena, [AttackNearest(), Agent()])
 
 
 def test_configuration_rejects_unknown_commands():
@@ -436,5 +456,23 @@ def test_a_reset_right_after_a_reset_starts_a_new_episode():
         observations, _ = environment.reset()
         assert set(observations) == set(environment.possible_agents)
         assert set(environment._agent_unit_ids.values()).isdisjoint(first_units)
-        environment.step({agent: {"command": COMMANDS.index("continue"), "target": np.zeros(2, np.float32)}
-                          for agent in environment.agents})
+        environment.step(
+            {
+                agent: {"command": COMMANDS.index("continue"), "target": np.zeros(2, np.float32)}
+                for agent in environment.agents
+            }
+        )
+
+
+@pytest.mark.engine
+def test_the_drawn_number_of_opponents_is_spawned_for_each_episode():
+    configuration = environment_configuration(five_versus_one_to_five_arena, [Agent(), AttackNearest()])
+    with ReinforcementLearningEnvironment(configuration) as environment:
+        opponents = set()
+        for seed in range(6):
+            observations, informations = environment.reset(seed=seed)
+            assert set(observations) == set(environment.possible_agents)  # always the 5 agents
+            enemies = next(iter(informations.values()))["enemies_alive"]
+            assert enemies == int(next(iter(observations.values()))["enemy_unit_mask"].sum())
+            opponents.add(enemies)
+        assert opponents <= {1, 2, 3, 4, 5} and len(opponents) > 1
