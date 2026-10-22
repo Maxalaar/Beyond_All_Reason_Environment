@@ -1,15 +1,17 @@
-# Beyond All Reason reinforcement learning
+# Beyond All Reason environment
 
 The real-time strategy game [Beyond All Reason](https://www.beyondallreason.info/) as a reinforcement learning
-environment (headless engine, Gymnasium/PettingZoo-style interface), and agents trained on it (see Training agents).
+environment: headless engine, Gymnasium/PettingZoo-style interface, scenarios, scripted opponents, analysis.
+It depends on no reinforcement learning library: the agents trained on it are in
+[Beyond_All_Reason_Reinforcement_Learning](https://github.com/Maxalaar/Beyond_All_Reason_Reinforcement_Learning).
 
 ## Installation (once)
 
 Any Python ≥ 3.11 environment works, for example a conda environment:
 
 ```bash
-conda create -n Beyond_All_Reason_Reinforcement_Learning python=3.13   # same name as the folder
-conda activate Beyond_All_Reason_Reinforcement_Learning
+conda create -n Beyond_All_Reason_Environment python=3.13   # same name as the folder
+conda activate Beyond_All_Reason_Environment
 pip install -e .                      # editable: code changes apply without reinstalling
 python scripts/download_game_data.py  # engine + game + map into game_data/ (~2 GB)
 ```
@@ -134,7 +136,7 @@ about 5 GB of memory per match.
 `ReinforcementLearningEnvironment` is a fight between alliances of teams, one agent (`team<t>_unit_<k>`) per unit of every team
 whose controller is `Agent()`, with the parallel interface
 of PettingZoo (`reset`, `step`, `close`, one dictionary entry per agent) and gymnasium spaces;
-`RayMultiAgentEnvironment` (in `beyond_all_reason_reinforcement_learning`, see below) wraps it for RLlib. Its
+Beyond_All_Reason_Reinforcement_Learning wraps it for RLlib (`RayMultiAgentEnvironment`). Its
 `ReinforcementLearningEnvironmentConfiguration` is made
 of separate parts, each answering one question:
 
@@ -178,7 +180,6 @@ python scripts/try_reinforcement_learning_environment.py --policy random --oppon
 python scripts/try_reinforcement_learning_environment.py --scenario one_versus_one --opponent AttackNearest   # an opponent that attacks
 python scripts/try_reinforcement_learning_environment.py --opponent Agent   # self-play: the same policy plays both sides
 python scripts/try_reinforcement_learning_environment.py --policy attack --show --speed 2   # watch it
-python scripts/try_ray_multi_agent_environment.py                              # through the RLlib wrapper
 ```
 
 - **Action**: `{"command": index in COMMANDS, "target": [x, z]}` with `(x, z)` a point of the map in `[0, 1]²`;
@@ -188,27 +189,6 @@ python scripts/try_ray_multi_agent_environment.py                              #
   extension spawns the units at each reset.
 
 
-## Training agents
-
-This repository holds two Python packages:
-
-- `beyond_all_reason_environment`: the game as an environment (everything above), with no reinforcement learning
-  library;
-- `beyond_all_reason_reinforcement_learning`: the agents trained on it with
-  [Maxalaar_Reinforcement_Learning](https://github.com/Maxalaar/Maxalaar_Reinforcement_Learning) (Ray RLlib): the
-  RLlib adapter `RayMultiAgentEnvironment`, the network `BeyondAllReasonModule` (attention over the entities, centralized
-  critic) and `VictoryCallback` (victory and defeat rates). The experiments are in `configurations/reinforcement_learning/`
-  and write to `experiments/`.
-
-```bash
-pip install -e ".[reinforcement_learning]"   # Ray RLlib, torch and Maxalaar_Reinforcement_Learning
-# From this repository root, with the scripts of Maxalaar_Reinforcement_Learning (cloned next to it):
-python ../Maxalaar_Reinforcement_Learning/scripts/curriculum_training.py \
-    --curriculum_configuration_file configurations/reinforcement_learning/pawn_curriculum.py   # 1v1, then 5v5
-python ../Maxalaar_Reinforcement_Learning/scripts/display_episodes.py \
-    --experimentation_configuration_file configurations/reinforcement_learning/five_versus_five_passive_ppo.py \
-    --reinforcement_learning_path experiments/pawn_curriculum/version_0/stage_1_five_versus_five_passive_ppo/reinforcement_learning/base/version_0
-```
 ## Analysis
 
 Each run also writes Parquet tables in `runs/<name>/version_<n>/tables/`:

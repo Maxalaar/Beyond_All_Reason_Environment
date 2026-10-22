@@ -1,7 +1,7 @@
 {
     // Conda environment of this project (same name as the folder), used for running, debugging and
     // type checking, and activated automatically in new integrated terminals.
-    "python.defaultInterpreterPath": "/media/SSD_1To/conda/envs/Beyond_All_Reason_Reinforcement_Learning/bin/python",
+    "python.defaultInterpreterPath": "/media/SSD_1To/conda/envs/Beyond_All_Reason_Environment/bin/python",
     "python.terminal.activateEnvironment": true,
 
     // basedpyright provides completion and type checking (Pylance does not run in VSCodium);

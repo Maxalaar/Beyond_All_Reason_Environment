@@ -10,21 +10,22 @@ so the environment must match its interface (to confirm).
 - Write names in full, no acronyms in project/file/folder names (the user asked for this).
 - Discuss with the user in French.
 
-## Packages (decided with the user, 2026-10-22)
-- Two packages in this repository, one direction of dependency: `beyond_all_reason_environment` (the game; imports
-  neither Ray nor Maxalaar_Reinforcement_Learning) and `beyond_all_reason_reinforcement_learning` (extra
-  `reinforcement_learning`: RLlib adapter ray_multi_agent_environment.py, architecture/ with BeyondAllReasonModule
-  and its centralized critic, victory_callback.py). Maxalaar_Reinforcement_Learning
-  (/media/SSD_1To/Programing_Projects/Python/Maxalaar_Reinforcement_Learning, public on GitHub) stays generic: it
-  knows no game. Experiments: configurations/reinforcement_learning/ (environment_name is the adapter's class path),
-  results in experiments/ (ignored by git); trainings run from this repository root with the scripts of
-  Maxalaar_Reinforcement_Learning, in its conda environment (where this package is installed with pip install -e).
-- Game-specific code goes here, not in Maxalaar_Reinforcement_Learning (the user's rule).
+## Repositories (decided with the user, 2026-10-22)
+- Three repositories, one direction of dependency:
+  - this one, Beyond_All_Reason_Environment (package beyond_all_reason_environment): the game only; imports no
+    reinforcement learning library (no Ray, no torch);
+  - Maxalaar_Reinforcement_Learning (/media/SSD_1To/Programing_Projects/Python/Maxalaar_Reinforcement_Learning):
+    the user's generic library over Ray RLlib; knows no game;
+  - Beyond_All_Reason_Reinforcement_Learning (/media/SSD_1To/Programing_Projects/Python/Beyond_All_Reason_Reinforcement_Learning):
+    depends on both: RLlib adapter, network, victory metric, training configurations and experiments.
+- Game code (scenarios, environment, engine) goes here; agents and experiments go to Beyond_All_Reason_Reinforcement_Learning.
+- This repository was named Beyond_All_Reason_Reinforcement_Learning until 2026-10-22 (renamed on GitHub and locally;
+  conda environment Beyond_All_Reason_Environment).
 
 ## Machine
 - NixOS 25.11, 20 CPU cores, 31 GiB RAM, NVIDIA RTX 5070 Laptop (8 GiB VRAM), Python 3.13.
 - No docker, gcc or cmake installed globally. The user works in conda environments
-  (`/media/SSD_1To/conda/envs/`); this project's is `Beyond_All_Reason_Reinforcement_Learning`
+  (`/media/SSD_1To/conda/envs/`); this project's is `Beyond_All_Reason_Environment`
   (Python 3.13, set as VSCodium default in `.vscode/settings.json`); the package is `pip install -e .` there, no `nix develop` needed:
   `match.py` builds `flake.nix#graphics-libraries` on demand for graphical matches.
 - nix-ld is enabled system-wide, so the prebuilt engine binaries run as is.
@@ -50,7 +51,7 @@ so the environment must match its interface (to confirm).
 - [ ] Micro environment (5 v 5), agreed design below. Phase 0: game extension + Lua <-> Python socket +
       synchronous step(), measure speed [done]; phase 1: scenario gadget [done]; phase 2: Python environment
       (no RLlib) [done: MicroEnvironment];
-      phase 3: RLlib adapter and agents [done: package beyond_all_reason_reinforcement_learning, see Packages];
+      phase 3: RLlib adapter and agents [done: repository Beyond_All_Reason_Reinforcement_Learning, see Repositories];
       phase 4: several arenas per engine process.
 - [ ] Later: 2D viewer, evaluation league vs BARb/STAI, hierarchical agents (group "captain" agents).
 
@@ -86,7 +87,7 @@ so the environment must match its interface (to confirm).
   replays, engine; games without Python) or ReinforcementLearningEnvironmentConfiguration
   (reinforcement_learning_environment_configuration.py: game + observation + action + rewards + engine; for
   ReinforcementLearningEnvironment). Scenarios (scenarios/<name>.py, variable named like the file) define only the situation; the
-  experiment (training configuration in configurations/reinforcement_learning/)
+  experiment (training configuration in Beyond_All_Reason_Reinforcement_Learning)
   chooses the controllers, observation, action and rewards. EngineConfiguration(speed None = 1000 headless, 1 with
   a window; graphics: GraphicsConfiguration) is shared; GraphicsConfiguration (show off, sound off, borderless
   fullscreen, camera_keys "zqsd", close_delay_seconds 5) goes to springsettings.cfg (Sound, WindowBorderless,
