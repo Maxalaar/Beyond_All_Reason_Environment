@@ -119,7 +119,8 @@ static void obs_str(const char *s) {
 }
 
 static void obs_printf(const char *fmt, ...) {
-    char tmp[256];
+    /* Room for the observation header, which carries spawned_units (up to 4096 characters). */
+    char tmp[8192];
     va_list ap;
     va_start(ap, fmt);
     vsnprintf(tmp, sizeof(tmp), fmt, ap);
