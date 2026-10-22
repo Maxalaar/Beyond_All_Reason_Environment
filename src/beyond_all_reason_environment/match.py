@@ -164,6 +164,18 @@ def write_graphics_widget(widgets_directory: Path, graphics: GraphicsConfigurati
     (widgets_directory / GRAPHICS_WIDGET.name).write_text(text)
 
 
+def dying_with_parent(command: list[str]) -> list[str]:
+    """``command`` run so that it is killed when the process that starts it dies, even killed (SIGKILL).
+
+    An engine left behind (an RLlib env runner killed by Ray when the memory is full, a training stopped by force)
+    keeps ~4.3 GB until killed by hand. setpriv (util-linux) sets the Linux parent death signal, then runs the
+    command; Popen's preexec_fn could set it too, but is not safe in a process with threads, like Ray's workers.
+    Without setpriv the command runs as is.
+    """
+    setpriv = shutil.which("setpriv")
+    return [setpriv, "--pdeathsig", "KILL", *command] if setpriv else command
+
+
 def start_engine(
     configuration: MatchConfiguration, run_directory: Path, graphics: GraphicsConfiguration | None = None
 ) -> subprocess.Popen:
@@ -200,7 +212,7 @@ def start_engine(
     with open(run_directory / "engine_output.log", "w") as log_file:
         # The child process keeps its own handle on the log file.
         return subprocess.Popen(
-            [str(executable), "--isolation", "--write-dir", str(run_directory), str(script_path)],
+            dying_with_parent([str(executable), "--isolation", "--write-dir", str(run_directory), str(script_path)]),
             cwd=run_directory,
             env=environment,
             stdout=log_file,
