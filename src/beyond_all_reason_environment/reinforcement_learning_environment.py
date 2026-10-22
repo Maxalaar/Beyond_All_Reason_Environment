@@ -17,8 +17,8 @@ Observation of an agent (dictionary of float32 arrays):
     Level 3 — global: all category tokens + context + terrain → action.
 
     Self (category 0):
-        self_chassis           chassis features of the agent's own unit (type one-hot, max health,
-                               armor type one-hot, normalized speed/range/sight, can_move)
+        self_chassis           chassis features of the agent's own unit (max health, armor type
+                               one-hot, normalized speed/range/sight, can_move)
         self_state             dynamic state features (position, current health, velocity, command, target,
                                allyteam_id_normalized)
         self_weapons           (maximum_weapons_per_unit, n_weapon) — per-weapon features; padded with zeros
@@ -75,8 +75,10 @@ Observation of an agent (dictionary of float32 arrays):
         … (same pattern)
 
 Chassis features (static within an episode for a given unit type on a given map):
-    type one-hot, maximum_health_thousands, armor_type one-hot (NUMBER_OF_ARMOR_TYPES),
+    maximum_health_thousands, armor_type one-hot (NUMBER_OF_ARMOR_TYPES),
     speed_x/z, weapon_range_x/z, sight_x/z, can_move.
+    No unit type one-hot: a unit is known by what it is (chassis and weapons), so the observation has the same size
+    in every scenario, the weights pass from one scenario to another, and an unknown unit is still described.
 
 State features (dynamic per step):
     x, z, relative_x/z, distance, health_fraction, velocity_x/z,
@@ -146,9 +148,8 @@ CONTEXT_FEATURES = [
 
 
 def chassis_feature_names(configuration: ReinforcementLearningEnvironmentConfiguration) -> list[str]:
-    """Static features of any entity: type, health capacity, armor, mobility and scale."""
+    """Static features of any entity: health capacity, armor, mobility and scale."""
     return [
-        *(f"type_{name}" for name in configuration.game.scenario.unit_types),
         "maximum_health_thousands",
         *(f"armor_type_{i}" for i in range(NUMBER_OF_ARMOR_TYPES)),
         "speed_x",
@@ -202,7 +203,6 @@ def _chassis_features(
     weapon_range = unit_type.get("weapon_range", 0.0)
     sight = unit_type.get("sight", 0.0)
     return [
-        *(float(unit["unit"] == name) for name in configuration.game.scenario.unit_types),
         unit_type.get("maximum_health", 1.0) / 1000.0,
         *(float(armor_t == i) for i in range(NUMBER_OF_ARMOR_TYPES)),
         speed / DISTANCE_SCALE,

@@ -151,8 +151,8 @@ of separate parts, each answering one question:
 
 Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five_arena`: the
 1v1 arena with 5 Pawns per side, `five_versus_one_to_five_arena`: the same with 1 to 5 Pawns on the east side, drawn
-for each game, `artillery_and_ten_versus_ten_to_twenty_arena`: a Shellshocker and 10 Pawns against 10 to 20 Pawns in
-the same arena, `five_versus_five`,
+for each game, `combined_arms_arena`: 3 Shellshockers, 5 Stouts and 10 Pawns against 15 to 30 Pawns in the same
+arena, `five_versus_five`,
 `armada_versus_cortex`, `armada_versus_cortex_battle`: 300 units per army, bots, vehicles, artillery and aircraft)
 and only define the situation: an experiment, for example a training configuration of
 the reinforcement learning library, chooses the scenario, the controllers and the other parts. Self-play is a game

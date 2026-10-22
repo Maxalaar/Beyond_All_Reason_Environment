@@ -114,11 +114,6 @@ class ScenarioConfiguration:
         """True when the teams start with placed units instead of a commander."""
         return self.teams[0].units is not None
 
-    @property
-    def unit_types(self) -> list[str]:
-        """Every placed unit name across all teams, sorted: the order of the unit type one-hot in observations."""
-        return sorted({name for team in self.teams for name in team.units or {}})
-
     def units_per_allyteam(self) -> list[int]:
         """Number of placed units of each alliance; the maximum when it is drawn for each game."""
         counts = [0] * self.number_of_allyteams

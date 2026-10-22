@@ -45,7 +45,12 @@ from beyond_all_reason_environment.scenario import (
     TeamConfiguration,
     spawn_positions,
 )
-from beyond_all_reason_environment.scenarios import five_versus_five, five_versus_one_to_five_arena, one_versus_one
+from beyond_all_reason_environment.scenarios import (
+    combined_arms_arena,
+    five_versus_five,
+    five_versus_one_to_five_arena,
+    one_versus_one,
+)
 
 MAP_SIZE = (6144.0, 4096.0)
 
@@ -365,6 +370,14 @@ def test_one_observation_configuration_can_serve_several_scenarios():
     assert shared.maximum_enemy_units is None
     five = environment_configuration(five_versus_five, observation=shared).observation
     assert (five.maximum_enemy_units, five.maximum_weapons_per_unit) == (5, 1)
+
+
+def test_chassis_features_do_not_depend_on_the_unit_types_of_the_scenario():
+    # No unit type one-hot: the weights trained on Pawns fit a scenario with other units.
+    pawns_only = chassis_feature_names(environment_configuration(one_versus_one))
+    combined_arms = chassis_feature_names(environment_configuration(combined_arms_arena))
+    assert pawns_only == combined_arms
+    assert not any(name.startswith("type_") for name in pawns_only)
 
 
 def test_mobile_and_building_units_are_separated():

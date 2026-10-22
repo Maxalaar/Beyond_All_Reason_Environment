@@ -7,7 +7,7 @@ from Python. Each file defines a scenario named like the file.
 
 from .armada_versus_cortex import armada_versus_cortex
 from .armada_versus_cortex_battle import armada_versus_cortex_battle
-from .artillery_and_ten_versus_ten_to_twenty_arena import artillery_and_ten_versus_ten_to_twenty_arena
+from .combined_arms_arena import combined_arms_arena
 from .five_versus_five import five_versus_five
 from .five_versus_five_arena import five_versus_five_arena
 from .five_versus_one_to_five_arena import five_versus_one_to_five_arena
@@ -16,7 +16,7 @@ from .one_versus_one import one_versus_one
 __all__ = [
     "armada_versus_cortex",
     "armada_versus_cortex_battle",
-    "artillery_and_ten_versus_ten_to_twenty_arena",
+    "combined_arms_arena",
     "five_versus_five",
     "five_versus_five_arena",
     "five_versus_one_to_five_arena",
