@@ -146,7 +146,8 @@ of separate parts, each answering one question:
 | `rewards` | `RewardWeights` | how the agents are rewarded |
 | `engine` | `EngineConfiguration` | how the engine runs (window, speed), without effect on the results |
 
-Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five`,
+Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_versus_one`, `five_versus_five_arena`: the
+1v1 arena with 5 Pawns per side, `five_versus_five`,
 `armada_versus_cortex`, `armada_versus_cortex_battle`: 300 units per army, bots, vehicles, artillery and aircraft)
 and only define the situation: an experiment, for example a training configuration of
 the reinforcement learning library, chooses the scenario, the controllers and the other parts. Self-play is a game
