@@ -19,9 +19,9 @@ from beyond_all_reason_environment import (
     Passive,
     ReinforcementLearningEnvironmentConfiguration,
 )
-from beyond_all_reason_environment.ray_multi_agent_environment import RayMultiAgentEnvironment
 from beyond_all_reason_environment.reinforcement_learning_environment_configuration import COMMANDS
 from beyond_all_reason_environment.scenarios import one_versus_one
+from beyond_all_reason_reinforcement_learning.ray_multi_agent_environment import RayMultiAgentEnvironment
 
 
 def random_action(observation: dict, random: np.random.Generator) -> dict:

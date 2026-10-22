@@ -5,11 +5,12 @@ import pytest
 pytest.importorskip("ray")
 
 from beyond_all_reason_environment.engine_configuration import GRAPHICAL_SPEED, HEADLESS_SPEED  # noqa: E402
-from beyond_all_reason_environment.ray_multi_agent_environment import RayMultiAgentEnvironment  # noqa: E402
+from beyond_all_reason_reinforcement_learning.ray_multi_agent_environment import RayMultiAgentEnvironment  # noqa: E402
 
 
 class ScriptedEnvironment:
-    """Stands for ReinforcementLearningEnvironment: each step plays the next (terminations, truncations, agents left)."""
+    """Stands for ReinforcementLearningEnvironment: each step plays the next (terminations, truncations, agents
+    left)."""
 
     def __init__(self, steps):
         self.agents = ["a", "b"]
@@ -28,10 +29,12 @@ def adapter(steps) -> RayMultiAgentEnvironment:
 
 
 def test_the_death_of_one_agent_does_not_end_the_episode():
-    environment = adapter([
-        ({"a": True, "b": False}, {"a": False, "b": False}, ["b"]),  # a's unit dies
-        ({"b": True}, {"b": False}, []),  # b wins or dies: the episode is over
-    ])
+    environment = adapter(
+        [
+            ({"a": True, "b": False}, {"a": False, "b": False}, ["b"]),  # a's unit dies
+            ({"b": True}, {"b": False}, []),  # b wins or dies: the episode is over
+        ]
+    )
     _, _, terminations, truncations, _ = environment.step({"a": {}, "b": {}})
     assert terminations == {"a": True, "b": False, "__all__": False}
     assert truncations["__all__"] is False

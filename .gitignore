@@ -4,6 +4,8 @@ game_data/
 reference/
 # One folder per launched match: logs, start script, results
 /runs/
+# Training results of the agents (configurations/reinforcement_learning/)
+/experiments/
 
 # Python
 __pycache__/

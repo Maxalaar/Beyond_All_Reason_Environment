@@ -10,6 +10,17 @@ so the environment must match its interface (to confirm).
 - Write names in full, no acronyms in project/file/folder names (the user asked for this).
 - Discuss with the user in French.
 
+## Packages (decided with the user, 2026-10-22)
+- Two packages in this repository, one direction of dependency: `beyond_all_reason_environment` (the game; imports
+  neither Ray nor Maxalaar_Reinforcement_Learning) and `beyond_all_reason_reinforcement_learning` (extra
+  `reinforcement_learning`: RLlib adapter ray_multi_agent_environment.py, architecture/ with BeyondAllReasonModule
+  and its centralized critic, victory_callback.py). Maxalaar_Reinforcement_Learning
+  (/media/SSD_1To/Programing_Projects/Python/Maxalaar_Reinforcement_Learning, public on GitHub) stays generic: it
+  knows no game. Experiments: configurations/reinforcement_learning/ (environment_name is the adapter's class path),
+  results in experiments/ (ignored by git); trainings run from this repository root with the scripts of
+  Maxalaar_Reinforcement_Learning, in its conda environment (where this package is installed with pip install -e).
+- Game-specific code goes here, not in Maxalaar_Reinforcement_Learning (the user's rule).
+
 ## Machine
 - NixOS 25.11, 20 CPU cores, 31 GiB RAM, NVIDIA RTX 5070 Laptop (8 GiB VRAM), Python 3.13.
 - No docker, gcc or cmake installed globally. The user works in conda environments
@@ -39,7 +50,8 @@ so the environment must match its interface (to confirm).
 - [ ] Micro environment (5 v 5), agreed design below. Phase 0: game extension + Lua <-> Python socket +
       synchronous step(), measure speed [done]; phase 1: scenario gadget [done]; phase 2: Python environment
       (no RLlib) [done: MicroEnvironment];
-      phase 3: RLlib adapter in Maxalaar_Reinforcement_Learning; phase 4: several arenas per engine process.
+      phase 3: RLlib adapter and agents [done: package beyond_all_reason_reinforcement_learning, see Packages];
+      phase 4: several arenas per engine process.
 - [ ] Later: 2D viewer, evaluation league vs BARb/STAI, hierarchical agents (group "captain" agents).
 
 ## Micro environment design (agreed with the user, 2026-10-15)
@@ -65,7 +77,7 @@ so the environment must match its interface (to confirm).
 ## Micro environment, how it works (learned while building it, 2026-10-16)
 - Code (now ReinforcementLearningEnvironment, driven by the native BridgeAI; named CombatEnvironment until 2026-10-18): reinforcement_learning_environment_configuration.py,
   reinforcement_learning_environment.py, game.py, scenario.py, controllers.py,
-  ray_multi_agent_environment.py (RLlib wrapper, extra "rllib"), engine_configuration.py, scenarios/, flat_map.py,
+  engine_configuration.py, scenarios/, flat_map.py,
   game_extension.py, bridge_ai/, lua/game_extension/; scripts/try_reinforcement_learning_environment.py,
   tests/test_reinforcement_learning_environment.py (`pytest -m engine` for the end-to-end test).
 - Configuration layout (agreed 2026-10-18, names chosen by the user): ScenarioConfiguration (scenario.py: the
@@ -74,7 +86,7 @@ so the environment must match its interface (to confirm).
   replays, engine; games without Python) or ReinforcementLearningEnvironmentConfiguration
   (reinforcement_learning_environment_configuration.py: game + observation + action + rewards + engine; for
   ReinforcementLearningEnvironment). Scenarios (scenarios/<name>.py, variable named like the file) define only the situation; the
-  experiment (training configuration in Maxalaar_Reinforcement_Learning, configurations/beyond_all_reason/)
+  experiment (training configuration in configurations/reinforcement_learning/)
   chooses the controllers, observation, action and rewards. EngineConfiguration(speed None = 1000 headless, 1 with
   a window; graphics: GraphicsConfiguration) is shared; GraphicsConfiguration (show off, sound off, borderless
   fullscreen, camera_keys "zqsd", close_delay_seconds 5) goes to springsettings.cfg (Sound, WindowBorderless,

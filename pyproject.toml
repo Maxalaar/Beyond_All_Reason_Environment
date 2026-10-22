@@ -1,15 +1,20 @@
 [project]
-name = "beyond-all-reason-environment"
+name = "beyond-all-reason-reinforcement-learning"
 version = "0.1.0"
-description = "Headless test harness and reinforcement learning environment for Beyond All Reason"
+description = "Beyond All Reason as a reinforcement learning environment, and agents trained on it"
 requires-python = ">=3.11"
 dependencies = ["gymnasium>=1.0", "matplotlib>=3.8", "pandas>=2.2", "pyarrow>=16", "streamlit>=1.40", "plotly>=5.24"]
 
 [project.optional-dependencies]
 # pip install -e ".[development]"
 development = ["ruff", "basedpyright", "pytest"]
-# pip install -e ".[rllib]": the RLlib MultiAgentEnv wrapper (ray_multi_agent_environment.py)
-rllib = ["ray[rllib]==2.54.0"]
+# pip install -e ".[reinforcement_learning]": beyond_all_reason_reinforcement_learning, the agents trained with
+# Maxalaar_Reinforcement_Learning (Ray RLlib). beyond_all_reason_environment needs none of them.
+reinforcement_learning = [
+    "ray[rllib]==2.54.0",
+    "torch",
+    "maxalaar-reinforcement-learning @ git+https://github.com/Maxalaar/Maxalaar_Reinforcement_Learning.git",
+]
 
 [build-system]
 requires = ["setuptools>=68"]
