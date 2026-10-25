@@ -48,7 +48,8 @@ class GraphicsConfiguration:
 class EngineConfiguration:
     """Speed, window, and what the engine leaves in the run folder."""
 
-    # Multiple of real time; None: HEADLESS_SPEED without a window, GRAPHICAL_SPEED with (+ and - change it in game).
+    # Multiple of real time; None: HEADLESS_SPEED without a window, GRAPHICAL_SPEED with (Alt+= and Alt+- change it in
+    # game).
     speed: float | None = None
     # The window; graphics.show False: none (the headless engine binary).
     graphics: GraphicsConfiguration = field(default_factory=GraphicsConfiguration)
