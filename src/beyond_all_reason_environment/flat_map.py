@@ -9,6 +9,7 @@ The archive layout:
     maps/<name>.smt   Spring Map Tiles: single solid-colour 32×32 tile
 """
 
+import os
 import struct
 import zipfile
 from pathlib import Path
@@ -23,6 +24,9 @@ _TEXELS_PER_SQUARE = 8  # fixed by Spring
 # Terrain colour: grey-green, neutral — RGB(96, 120, 64)
 # R5 = 96>>3 = 12,  G6 = 120>>2 = 30,  B5 = 64>>3 = 8
 _TERRAIN_COLOR = (12 << 11) | (30 << 5) | 8  # 25544 in RGB565
+
+# Sky and distant fog, red, green, blue in [0, 1]: near black, a little green like the terrain.
+_BACKGROUND_COLOR = "0.05, 0.06, 0.04"
 
 # Flat terrain height (elmos above sea level); must be > 0 to avoid water.
 _TERRAIN_HEIGHT = 100.0
@@ -130,6 +134,15 @@ def _mapinfo_lua(name: str, width_sq: int, height_sq: int) -> str:
         f"    maxmetal    = 0.0,\n"
         f"    extractorradius = 500.0,\n"
         f"    notDeformable   = true,\n"
+        # Without an atmosphere, the engine's default fog whitens the view from near the camera on, and a blue sky
+        # meets the dark ground beyond the map edge. A dark sky, and a fog of its colour far away (fractions of
+        # the view distance): beyond the map, the ground fades into it.
+        f"    atmosphere = {{\n"
+        f"        skyColor = {{ {_BACKGROUND_COLOR} }},\n"
+        f"        fogColor = {{ {_BACKGROUND_COLOR} }},\n"
+        f"        fogStart = 0.5,\n"
+        f"        fogEnd   = 1.0,\n"
+        f"    }},\n"
         f"    smf = {{\n"
         f"        minheight = {_HEIGHT_MIN},\n"
         f"        maxheight = {_HEIGHT_MAX},\n"
@@ -159,17 +172,29 @@ def generate_flat_map(name: str, width_sq: int, height_sq: int) -> Path:
     output = GAME_DATA_DIRECTORY / "maps" / f"{name}.sdz"
     output.parent.mkdir(parents=True, exist_ok=True)
 
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    # Written beside, then moved into place: an engine starting meanwhile reads the old archive or the new one.
+    temporary = output.with_name(f"{output.name}.{os.getpid()}.tmp")
+    with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("mapinfo.lua", _mapinfo_lua(name, width_sq, height_sq))
         zf.writestr(f"maps/{name}.smf", _smf_bytes(name, width_sq, height_sq))
         zf.writestr(f"maps/{name}.smt", _smt_bytes(name))
+    os.replace(temporary, output)
 
     return output
 
 
 def ensure_flat_map(name: str, width_sq: int, height_sq: int) -> Path:
-    """Generate the flat map only if the archive does not already exist."""
+    """Generate the flat map only if the archive does not exist, or holds another mapinfo.lua (written by an older
+    flat_map.py)."""
     output = GAME_DATA_DIRECTORY / "maps" / f"{name}.sdz"
-    if not output.exists():
+    if not output.exists() or _archived_mapinfo(output) != _mapinfo_lua(name, width_sq, height_sq):
         generate_flat_map(name, width_sq, height_sq)
     return output
+
+
+def _archived_mapinfo(archive: Path) -> str | None:
+    try:
+        with zipfile.ZipFile(archive) as zf:
+            return zf.read("mapinfo.lua").decode()
+    except (zipfile.BadZipFile, KeyError):
+        return None

@@ -12,7 +12,7 @@ Typical game:
 
 from dataclasses import replace
 
-from ..scenario import SpawnZone, TeamConfiguration
+from ..scenario import BLUE, RED, SpawnZone, TeamConfiguration
 from ..units import units
 from .one_versus_one import one_versus_one
 
@@ -21,7 +21,7 @@ ARMY = {units.armada.vehicle.t1.shellshocker: 3, units.armada.vehicle.t1.stout: 
 combined_arms_symmetric_arena = replace(
     one_versus_one,
     teams=[
-        TeamConfiguration(units=dict(ARMY), spawn_zone=SpawnZone(0.0, 0.15, 0.25, 0.75)),
-        TeamConfiguration(units=dict(ARMY), spawn_zone=SpawnZone(0.85, 1.0, 0.25, 0.75)),
+        TeamConfiguration(units=dict(ARMY), spawn_zone=SpawnZone(0.0, 0.15, 0.25, 0.75), color=BLUE),
+        TeamConfiguration(units=dict(ARMY), spawn_zone=SpawnZone(0.85, 1.0, 0.25, 0.75), color=RED),
     ],
 )

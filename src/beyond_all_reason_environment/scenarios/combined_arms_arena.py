@@ -20,7 +20,7 @@ Typical game:
 
 from dataclasses import replace
 
-from ..scenario import SpawnZone, TeamConfiguration
+from ..scenario import BLUE, RED, SpawnZone, TeamConfiguration
 from ..units import units
 from .one_versus_one import one_versus_one
 
@@ -34,10 +34,12 @@ combined_arms_arena = replace(
                 units.armada.bot.t1.pawn: 10,
             },
             spawn_zone=SpawnZone(0.0, 0.15, 0.25, 0.75),
+            color=BLUE,
         ),
         TeamConfiguration(
             units={units.armada.vehicle.t1.stout: (3, 6), units.armada.bot.t1.pawn: (15, 30)},
             spawn_zone=SpawnZone(0.85, 1.0, 0.25, 0.75),
+            color=RED,
         ),
     ],
 )

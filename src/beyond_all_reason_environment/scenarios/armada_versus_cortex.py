@@ -4,10 +4,10 @@ Normal start (commander and economy); start positions are drawn at random from t
 Typical game: GameConfiguration(armada_versus_cortex, controllers=[BuiltInArtificialIntelligence("BARb")] * 2).
 """
 
-from ..scenario import ScenarioConfiguration, TeamConfiguration
+from ..scenario import BLUE, RED, ScenarioConfiguration, TeamConfiguration
 
 armada_versus_cortex = ScenarioConfiguration(
     map_name="Red Comet Remake 1.8",
-    teams=[TeamConfiguration(side="Armada"), TeamConfiguration(side="Cortex")],
+    teams=[TeamConfiguration(side="Armada", color=BLUE), TeamConfiguration(side="Cortex", color=RED)],
     maximum_game_minutes=60,
 )

@@ -10,14 +10,14 @@ Typical games:
 
 from dataclasses import replace
 
-from ..scenario import SpawnZone, TeamConfiguration
+from ..scenario import BLUE, RED, SpawnZone, TeamConfiguration
 from ..units import units
 from .one_versus_one import one_versus_one
 
 five_versus_five_arena = replace(
     one_versus_one,
     teams=[
-        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}, spawn_zone=SpawnZone(0.0, 0.05, 0.4, 0.6)),
-        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}, spawn_zone=SpawnZone(0.95, 1.0, 0.4, 0.6)),
+        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}, spawn_zone=SpawnZone(0.0, 0.05, 0.4, 0.6), color=BLUE),
+        TeamConfiguration(units={units.armada.bot.t1.pawn: 5}, spawn_zone=SpawnZone(0.95, 1.0, 0.4, 0.6), color=RED),
     ],
 )

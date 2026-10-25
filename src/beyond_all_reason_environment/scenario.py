@@ -17,6 +17,10 @@ from .units import COMMANDERS
 # Distance kept from the map border by the default spawn zones (fraction of the map), so no unit starts on the edge.
 SPAWN_MARGIN = 0.02
 
+# Team colours (red, green, blue in [0, 255]), Beyond All Reason's first two for two alliances.
+BLUE = (0, 77, 255)
+RED = (255, 16, 5)
+
 
 @dataclass
 class SpawnZone:
@@ -38,7 +42,7 @@ class SpawnZone:
 
 @dataclass
 class TeamConfiguration:
-    """One team: its faction, how it starts (and where), and the alliance it belongs to."""
+    """One team: its faction, how it starts (and where), the alliance it belongs to, and its colour."""
 
     # One faction, or a list: each game of a run then draws one (reproducibly, from the game's seed).
     side: Side | list[Side] = "Armada"
@@ -55,10 +59,15 @@ class TeamConfiguration:
     spawn_depth: float = 1.0
     # An explicit zone instead, for full control (spawn_depth is then unused).
     spawn_zone: SpawnZone | None = None
+    # (red, green, blue) in [0, 255], set by the game extension's gadget. None: the game's own colour (its
+    # AutoColorPicker, which can change from a game to the next).
+    color: tuple[int, int, int] | None = None
 
     def __post_init__(self) -> None:
         if not 0 <= self.spawn_depth <= 1:
             raise ValueError(f"spawn_depth must be in [0, 1], not {self.spawn_depth}")
+        if self.color is not None and (len(self.color) != 3 or not all(0 <= value <= 255 for value in self.color)):
+            raise ValueError(f"color must be (red, green, blue) in [0, 255], not {self.color}")
         for name, count in (self.units or {}).items():
             minimum, maximum = count if isinstance(count, tuple) else (count, count)
             if not 1 <= minimum <= maximum:

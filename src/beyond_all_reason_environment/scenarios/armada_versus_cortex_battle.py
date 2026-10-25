@@ -7,7 +7,7 @@ map (spawn_depth 0.6 of each half), with no commander; the game ends when an arm
 Typical game: GameConfiguration(armada_versus_cortex_battle, controllers=[AttackNearest(), AttackNearest()]).
 """
 
-from ..scenario import ScenarioConfiguration, TeamConfiguration
+from ..scenario import BLUE, RED, ScenarioConfiguration, TeamConfiguration
 from ..units import units
 
 armada, cortex = units.armada, units.cortex
@@ -37,6 +37,7 @@ armada_versus_cortex_battle = ScenarioConfiguration(
                 armada.aircraft.t1.stormbringer: 15,  # bomber
                 armada.aircraft.t1.banshee: 10,  # gunship
             },
+            color=BLUE,
         ),
         TeamConfiguration(
             side="Cortex",
@@ -59,6 +60,7 @@ armada_versus_cortex_battle = ScenarioConfiguration(
                 cortex.aircraft.t1.whirlwind: 15,  # bomber
                 cortex.aircraft.t1.shuriken: 10,  # gunship
             },
+            color=RED,
         ),
     ],
     maximum_game_minutes=10,

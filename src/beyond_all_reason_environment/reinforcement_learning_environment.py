@@ -117,7 +117,13 @@ import numpy as np
 from gymnasium import spaces
 
 from .controllers import DoNothing
-from .game import controller_mod_options, no_commander_mod_options, unit_states
+from .game import (
+    controller_mod_options,
+    no_commander_mod_options,
+    team_color_mod_options,
+    team_name_mod_options,
+    unit_states,
+)
 from .game_extension import extension_game_name
 from .installation import build_bridge_ai
 from .match import RUNS_DIRECTORY, start_engine
@@ -783,6 +789,8 @@ class ReinforcementLearningEnvironment:
                 "deathmode": "neverend",
                 "reinforcement_learning_full_vision": "1" if configuration.game.scenario.full_vision else "0",
                 **controller_mod_options(configuration.game),
+                **team_color_mod_options(configuration.game.scenario),
+                **team_name_mod_options(configuration.game),
                 **no_commander_mod_options(),
             },
         )

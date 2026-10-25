@@ -75,6 +75,24 @@ def controller_mod_options(game: GameConfiguration) -> dict[str, str]:
     return {"reinforcement_learning_controllers": "/".join(scripts)} if scripts else {}
 
 
+def team_color_mod_options(scenario: ScenarioConfiguration) -> dict[str, str]:
+    """The mod option that makes the gadget colour the teams that have a colour: "<team>,<red>,<green>,<blue>/..."."""
+    colors = [
+        f"{index},{','.join(map(str, team.color))}"
+        for index, team in enumerate(scenario.teams)
+        if team.color is not None
+    ]
+    return {"reinforcement_learning_team_colors": "/".join(colors)} if colors else {}
+
+
+def team_name_mod_options(game: GameConfiguration) -> dict[str, str]:
+    """The mod option that makes the gadget name the teams after their controllers: "<team>,<name>/...". A label
+    that several teams share (Agent in self-play) is followed by the team's number, from 1."""
+    labels = [controller.label for controller in game.controllers]
+    names = [f"{label} {index + 1}" if labels.count(label) > 1 else label for index, label in enumerate(labels)]
+    return {"reinforcement_learning_team_names": "/".join(f"{index},{name}" for index, name in enumerate(names))}
+
+
 # Names no unit: BAR's loadout gadget (unit_scenario_loadout.lua) skips it, so the loadout creates nothing.
 LOADOUT_PLACEHOLDER = "reinforcement_learning_placeholder"
 
@@ -99,12 +117,14 @@ def game_mod_options(game: GameConfiguration, seed: int) -> dict[str, str]:
     Placed units: spawn positions are drawn from ``seed``, so a game is reproducible, and the game ends when every
     unit of a side is destroyed (deathmode killall), or its commanders with scenario.commander_death_ends_game
     (deathmode com); a normal start keeps the game's own end condition. Scripted
-    controllers and full vision apply in both cases.
+    controllers, team colours and names, and full vision apply in both cases.
     """
     scenario = game.scenario
     options = {
         "reinforcement_learning_full_vision": "1" if scenario.full_vision else "0",
         **controller_mod_options(game),
+        **team_color_mod_options(scenario),
+        **team_name_mod_options(game),
     }
     if not scenario.places_units:
         return options

@@ -24,7 +24,7 @@ Typical game:
 
 from dataclasses import replace
 
-from ..scenario import TeamConfiguration
+from ..scenario import BLUE, RED, TeamConfiguration
 from ..units import units
 from .one_versus_one import one_versus_one
 
@@ -37,6 +37,9 @@ ARMY = {
 
 combined_arms_commander_arena = replace(
     one_versus_one,
-    teams=[TeamConfiguration(units=dict(ARMY), spawn_depth=1.0), TeamConfiguration(units=dict(ARMY), spawn_depth=1.0)],
+    teams=[
+        TeamConfiguration(units=dict(ARMY), spawn_depth=1.0, color=BLUE),
+        TeamConfiguration(units=dict(ARMY), spawn_depth=1.0, color=RED),
+    ],
     commander_death_ends_game=True,
 )
