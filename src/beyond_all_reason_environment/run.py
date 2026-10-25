@@ -13,7 +13,7 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import asdict, dataclass, field, fields, replace
 from pathlib import Path
-from typing import get_type_hints
+from typing import Literal, get_args, get_origin, get_type_hints
 
 from .engine_configuration import EngineConfiguration, GraphicsConfiguration
 from .game import GameConfiguration, game_mod_options
@@ -195,9 +195,14 @@ def add_configuration_arguments(parser: argparse.ArgumentParser) -> None:
             value_type = {float | None: float, str | None: str}.get(annotation, annotation)  # pyright: ignore
             options["type"] = value_type
             options["metavar"] = value_type.__name__  # pyright: ignore[reportAttributeAccessIssue]
-        elif annotation == str | list[str]:
+        elif annotation in (str | list[str], tuple[str, ...]):
             options["nargs"] = "+"
             options["metavar"] = "str"
+        elif annotation == Path | str | None:
+            options["type"] = Path
+            options["metavar"] = "path"
+        elif get_origin(annotation) is Literal:
+            options["choices"] = get_args(annotation)
         else:
             raise TypeError(f"no command line option for the type of {name}: {annotation}")
         group.add_argument(f"--{name}", **options)
@@ -207,12 +212,16 @@ def configuration_from_arguments(arguments: argparse.Namespace) -> RunConfigurat
     """The configuration file of ``arguments``, with the fields given on the command line replaced."""
     configuration = load_run_configuration(arguments.configuration)
     overrides: dict[str, dict] = {owner: {} for owner in OVERRIDABLE_CLASSES}
-    for name, (owner, _) in _overridable_fields().items():
+    for name, (owner, annotation) in _overridable_fields().items():
         value = getattr(arguments, f"override_{name}")
         if value is None:
             continue
-        # nargs="+" always gives a list; one map stays a plain name.
-        overrides[owner][name] = value[0] if isinstance(value, list) and len(value) == 1 else value
+        if annotation == tuple[str, ...]:
+            value = tuple(value)
+        elif isinstance(value, list) and len(value) == 1:
+            # nargs="+" always gives a list; one map stays a plain name.
+            value = value[0]
+        overrides[owner][name] = value
     # replace() runs __post_init__ again, so replaced values are checked like the ones of the file.
     engine = configuration.engine
     graphics = replace(engine.graphics, **overrides["graphics"])

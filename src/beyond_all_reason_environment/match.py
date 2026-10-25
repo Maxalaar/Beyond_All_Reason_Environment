@@ -12,9 +12,10 @@ from pathlib import Path
 
 from .engine_configuration import GraphicsConfiguration
 from .flat_map import ensure_flat_map
-from .game_extension import extension_game_name, write_game_extension
+from .game_extension import ARCHIVE_FOLDER_NAME, extension_game_name, write_game_extension
 from .installation import GAME_DATA_DIRECTORY, GRAPHICAL_EXECUTABLE, HEADLESS_EXECUTABLE, REPOSITORY_ROOT
 from .start_script import FRAMES_PER_SECOND, MatchConfiguration, build_start_script
+from .video_recording import FRAMES_LINK, capture_interval, prepare_video_frames, start_video_recording
 
 RUNS_DIRECTORY = REPOSITORY_ROOT / "runs"
 LUA_WIDGETS_DIRECTORY = Path(__file__).parent / "lua" / "widgets"
@@ -105,6 +106,8 @@ def engine_settings(graphics: GraphicsConfiguration) -> dict[str, str]:
     return {
         **window,
         "Sound": "1" if graphics.sound else "0",
+        # The system's cursor, out of the window's image (the videos): with the interface presets that hide things.
+        "HardwareCursor": "0" if graphics.interface == "complete" else "1",
         "CamSpringLockCardinalDirections": "1" if graphics.lock_cardinal_directions else "0",
     }
 
@@ -145,7 +148,8 @@ def _tidy_run_directory(run_directory: Path, keep_engine_files: bool) -> None:
 
 
 def write_graphics_widget(widgets_directory: Path, graphics: GraphicsConfiguration) -> None:
-    """The widget of lua/graphics_widgets/ with the camera keys and the closing delay of ``graphics``."""
+    """The widget of lua/graphics_widgets/ with the camera keys, the closing delay and the hidden widgets of
+    ``graphics``."""
     text = GRAPHICS_WIDGET.read_text()
     text = text.replace('local CAMERA_KEYS = ""\n', f'local CAMERA_KEYS = "{graphics.camera_keys or ""}"\n')
     delay = -1 if graphics.close_delay_seconds is None else graphics.close_delay_seconds
@@ -161,6 +165,12 @@ def write_graphics_widget(widgets_directory: Path, graphics: GraphicsConfigurati
     ):
         sign = -1 if inverted else 1
         text = text.replace(f"local {axis}_ROTATION_SIGN = 1\n", f"local {axis}_ROTATION_SIGN = {sign}\n")
+    hidden = ", ".join(json.dumps(name) for name in graphics.all_hidden_widgets)
+    text = text.replace("local HIDDEN_WIDGETS = {}\n", f"local HIDDEN_WIDGETS = {{ {hidden} }}\n")
+    text = text.replace('local INTERFACE = "complete"\n', f'local INTERFACE = "{graphics.interface}"\n')
+    if graphics.video_path is not None:
+        text = text.replace('local VIDEO_FRAMES = ""\n', f'local VIDEO_FRAMES = "{FRAMES_LINK}"\n')
+        text = text.replace("local CAPTURE_INTERVAL = 1\n", f"local CAPTURE_INTERVAL = {capture_interval(graphics)}\n")
     (widgets_directory / GRAPHICS_WIDGET.name).write_text(text)
 
 
@@ -181,7 +191,8 @@ def start_engine(
 ) -> subprocess.Popen:
     """Prepare ``run_directory`` (widgets, game extension, start script) and start the engine on it without waiting.
 
-    With ``graphics.show`` a window shows the game. The engine output goes to engine_output.log in the run folder.
+    With ``graphics.show`` a window shows the game, recorded into ``graphics.video_path`` when it is given. The engine
+    output goes to engine_output.log in the run folder.
     """
     shown = graphics is not None and graphics.show
     executable = GRAPHICAL_EXECUTABLE if shown else HEADLESS_EXECUTABLE
@@ -193,13 +204,24 @@ def start_engine(
     widgets_directory.mkdir(parents=True, exist_ok=True)
     for widget in LUA_WIDGETS_DIRECTORY.glob("*.lua"):
         shutil.copy(widget, widgets_directory)
-    if shown:
-        write_graphics_widget(widgets_directory, graphics)  # pyright: ignore[reportArgumentType]
 
-    if configuration.game_version == extension_game_name():
+    uses_game_extension = configuration.game_version == extension_game_name()
+    if uses_game_extension:
         write_game_extension(run_directory)
+    if shown:
+        # In the game extension, the graphics widget is a widget of the game: Beyond All Reason lets only those
+        # disable other widgets (the interface presets). Otherwise a user widget, without the presets.
+        if uses_game_extension:
+            graphics_widgets_directory = run_directory / "games" / ARCHIVE_FOLDER_NAME / "luaui" / "widgets"
+            graphics_widgets_directory.mkdir(parents=True, exist_ok=True)
+        else:
+            graphics_widgets_directory = widgets_directory
+        write_graphics_widget(graphics_widgets_directory, graphics)  # pyright: ignore[reportArgumentType]
     if configuration.flat_map_squares is not None:
         ensure_flat_map(configuration.map_name, *configuration.flat_map_squares)
+
+    recording = shown and graphics.video_path is not None  # pyright: ignore[reportOptionalMemberAccess]
+    frames_directory = prepare_video_frames(run_directory) if recording else None
 
     script_path = run_directory / "script.txt"
     script_path.write_text(build_start_script(configuration))
@@ -211,13 +233,16 @@ def start_engine(
         environment = {**os.environ, "SPRING_DATADIR": str(GAME_DATA_DIRECTORY)}
     with open(run_directory / "engine_output.log", "w") as log_file:
         # The child process keeps its own handle on the log file.
-        return subprocess.Popen(
+        process = subprocess.Popen(
             dying_with_parent([str(executable), "--isolation", "--write-dir", str(run_directory), str(script_path)]),
             cwd=run_directory,
             env=environment,
             stdout=log_file,
             stderr=subprocess.STDOUT,
         )
+    if frames_directory is not None:
+        start_video_recording(process, frames_directory, graphics, run_directory / "video_recording.log")  # pyright: ignore[reportArgumentType]
+    return process
 
 
 def run_match(

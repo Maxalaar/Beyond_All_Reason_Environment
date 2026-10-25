@@ -1,7 +1,10 @@
 -- Settings of a graphical game (engine_configuration.GraphicsConfiguration): camera keys, camera rotation with the
--- right mouse button, closing at the end, a camera over the whole map at the start, and no ground scar of an episode
--- of the reinforcement learning environment left in the next. Copied into LuaUI/Widgets of the run folder by match.py only when there
--- is a window; match.py writes the six values below.
+-- right mouse button, closing at the end, a camera over the whole map at the start, no ground scar of an episode of
+-- the reinforcement learning environment left in the next, the widgets of the game hidden by the interface preset, and
+-- the frames of the video saved (video_recording.py).
+-- Written by match.py only when there is a window, with its values below: into the game extension when the game uses
+-- it (a widget of the game, which may disable others), otherwise into LuaUI/Widgets of the run folder (a user widget,
+-- which Beyond All Reason forbids to: no interface preset then).
 
 function widget:GetInfo()
 	return {
@@ -10,6 +13,8 @@ function widget:GetInfo()
 		-- First in the input order (lowest layer), so the right button reaches this widget before the game's ones.
 		layer = -1000000,
 		enabled = true,
+		-- The widget handler itself (not its proxy), to disable the hidden widgets; given to widgets of the game only.
+		handler = true,
 	}
 end
 
@@ -19,6 +24,16 @@ local CAMERA_KEYS = ""
 local CLOSE_DELAY_SECONDS = -1
 -- Holding the right mouse button and moving the mouse rotates the camera (spectators only: they give no orders).
 local RIGHT_BUTTON_ROTATION = false
+-- Names of the game's widgets to disable (GraphicsConfiguration.all_hidden_widgets).
+local HIDDEN_WIDGETS = {}
+-- The interface preset (GraphicsConfiguration.interface). The engine's own minimap, clock, frame rate, speed and
+-- tooltip come back when the game's widgets replacing them are disabled: "reduced" turns them off one by one,
+-- "cinematic" hides all that is drawn over the screen (the engine's hideinterface, which hides the health bars too).
+local INTERFACE = "complete"
+-- Folder of the run folder where the frames of the video are saved ("": no video), one every CAPTURE_INTERVAL game
+-- frames; video_recording.py encodes and deletes them.
+local VIDEO_FRAMES = ""
+local CAPTURE_INTERVAL = 1
 -- Radians per pixel of mouse movement.
 local ROTATION_SPEED = 0.003
 -- 1: the view follows the mouse (right turns right, up tilts up); -1 inverts that axis.
@@ -36,6 +51,10 @@ local CAMERA_ACTIONS = { "moveforward", "moveleft", "moveback", "moveright" }
 local START_TILT = math.pi * 0.8
 local DISTANCE_PER_MAP_SIZE = 1.3
 
+local widgetsHidden = false
+local captureNext = false
+local capturedFrames = 0
+local updatesAfterHiding = 0
 local gameOverTimer = nil
 local missionInfoClosed = false
 local cameraPlacements = 0
@@ -95,6 +114,9 @@ local function removeGroundDecals()
 end
 
 function widget:GameFrame(frame)
+	if VIDEO_FRAMES ~= "" and frame % CAPTURE_INTERVAL == 0 then
+		captureNext = true
+	end
 	-- A few frames in, after the game's own camera widgets, which move it at the start; again at frame 30, as it was
 	-- once found moved at frame 20 (2026-10-25, cause not found).
 	if cameraPlacements < 2 and frame >= (cameraPlacements == 0 and 2 or 30) then
@@ -108,6 +130,17 @@ function widget:GameFrame(frame)
 		end
 		episode = current
 	end
+end
+
+-- After everything is drawn, the interface included: the frame asked by GameFrame.
+function widget:DrawScreenPost()
+	if not captureNext then
+		return
+	end
+	captureNext = false
+	local width, height = Spring.GetViewGeometry()
+	gl.SaveImage(0, 0, width, height, string.format("%s/%08d.bmp", VIDEO_FRAMES, capturedFrames))
+	capturedFrames = capturedFrames + 1
 end
 
 function widget:Initialize()
@@ -153,7 +186,33 @@ function widget:GameOver()
 	end
 end
 
+-- At the first update, once every widget of the game is loaded (this one loads first).
+local function hideWidgets()
+	for _, name in ipairs(HIDDEN_WIDGETS) do
+		widgetHandler:DisableWidget(name)
+	end
+	widgetsHidden = true
+end
+
+-- A few updates after hideWidgets: the disabled widgets turn the engine's elements back on when they shut down.
+local function hideEngineInterface()
+	if INTERFACE == "reduced" then
+		Spring.SendCommands("minimap minimize 1", "clock 0", "fps 0", "speed 0", "tooltip 0")
+	elseif INTERFACE == "cinematic" then
+		Spring.SendCommands("hideinterface 1")
+	end
+end
+
 function widget:Update()
+	if not widgetsHidden then
+		hideWidgets()
+	end
+	if updatesAfterHiding < 10 then
+		updatesAfterHiding = updatesAfterHiding + 1
+		if updatesAfterHiding == 10 then
+			hideEngineInterface()
+		end
+	end
 	-- This widget initialises before the game's Mission Info panel: close it once it exists.
 	if not missionInfoClosed then
 		closeMissionInfo()
