@@ -25,8 +25,9 @@
 -- loadout replaces the commanders (game.no_commander_mod_options).
 --
 -- Each reset spawns the new units (x, z as fractions of the map) first, then removes every unit that was there
--- before (the previous episode's) and its wrecks: a team is never left without units, so the game's end condition
--- (deathmode killall in games without Python) only fires when a side is really eliminated.
+-- before (the previous episode's), its wrecks and the projectiles still flying: a team is never left without units,
+-- so the game's end condition (deathmode killall in games without Python) only fires when a side is really
+-- eliminated.
 -- The states array has 2*N values for N allyteams: fire and move per team index, -1 keeps the unit's default.
 --
 -- Scripted controllers (controllers.py) run here too, in matches and in the environment alike: the mod option
@@ -114,6 +115,14 @@ local function placeScenario(spawnsText, spawnSeparator, statesText)
 			Spring.DestroyUnit(unitID, false, true)  -- reclaimed: no wreck
 		end
 	end
+	-- The shells and missiles still flying, and the debris, of before: over the map and beyond its edges.
+	local margin = math.max(Game.mapSizeX, Game.mapSizeZ)
+	local projectiles = Spring.GetProjectilesInRectangle(
+		-margin, -margin, Game.mapSizeX + margin, Game.mapSizeZ + margin
+	) or {}
+	for _, projectileID in ipairs(projectiles) do
+		Spring.DeleteProjectile(projectileID)
+	end
 	return unitIDs
 end
 
@@ -121,6 +130,8 @@ local function reset(message)
 	local fields = split(message, "|")
 	local unitIDs = placeScenario(fields[2], ";", fields[3])
 	currentEpisode = tonumber(fields[1])
+	-- For the graphics widget (graphics_settings.lua), which removes the ground scars of the previous episode.
+	Spring.SetGameRulesParam("reinforcement_learning_episode", currentEpisode)
 	-- Return the spawned unit IDs to the BridgeAI (synchronous response).
 	return table.concat(unitIDs, ",")
 end
