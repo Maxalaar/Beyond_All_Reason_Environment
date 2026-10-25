@@ -7,9 +7,10 @@ Units (from the engine, against the Pawns' armor):
     Shellshocker (armart) 620 health, speed 54, range 710, 182 damage every 4.3 s, area 38 (artillery, slow shells)
     Commander (armcom)    3700 health, speed 37.5, range 300, 75 damage every 0.4 s; its D-gun needs a manual fire
                           command that no controller gives, and it explodes when it dies
-The commander is a builder: under a "fight" order, the engine makes a builder repair allies and reclaim wrecks and
-units before it fights (CBuilderCAI::ExecuteFight); left without orders, it does nothing on its own. An experiment
-that wants it to fight only leaves "fight" out of its commands (ActionConfiguration.commands).
+The commander is a builder. Under a "fight" order (CBuilderCAI::ExecuteFight), the engine looks around it, within
+300 elmos × its move state + its build distance (~450 elmos on manoeuvre): it attacks an enemy there first, otherwise
+repairs a damaged ally, otherwise reclaims a wreck, otherwise goes on to the point. Left without orders, it does
+nothing on its own.
 
 Spawn: each side anywhere in its half of the map (spawn_depth 1.0: the whole half, SPAWN_MARGIN from the borders),
 positions drawn uniformly: armies scattered, sometimes in contact at once, which leaves no corner to wait in for a
