@@ -153,6 +153,8 @@ Predefined scenarios are in `beyond_all_reason_environment.scenarios` (`one_vers
 1v1 arena with 5 Pawns per side, `five_versus_one_to_five_arena`: the same with 1 to 5 Pawns on the east side, drawn
 for each game, `combined_arms_arena`: 3 Shellshockers, 5 Stouts and 10 Pawns against 3 to 6 Stouts and 15 to 30
 Pawns in the same arena, `combined_arms_symmetric_arena`: these 18 units on both sides, for self-play,
+`combined_arms_commander_arena`: the same with a commander on each side, spawned anywhere in its half, the game
+ending when a commander dies (`ScenarioConfiguration.commander_death_ends_game`),
 `five_versus_five`,
 `armada_versus_cortex`, `armada_versus_cortex_battle`: 300 units per army, bots, vehicles, artillery and aircraft)
 and only define the situation: an experiment, for example a training configuration of

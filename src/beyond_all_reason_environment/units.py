@@ -1,4 +1,4 @@
-"""All mobile units of Beyond All Reason, organised by faction → type → tier.
+"""All mobile units of Beyond All Reason, organised by faction → type → tier, and each faction's commander.
 
 Use for IDE autocomplete in scenario configurations::
 
@@ -29,7 +29,7 @@ class _ArmadaBotT2:
     advanced_construction_bot = "armack"  # Advanced Construction Bot
     platypus = "armamph"  # Platypus
     smuggler = "armaser"  # Smuggler
-    commander = "armdecom"  # Commander
+    decoy_commander = "armdecom"  # Decoy Commander: looks like the commander, weaker weapons
     butler = "armfark"  # Butler
     sprinter = "armfast"  # Sprinter
     fatboy = "armfboy"  # Fatboy
@@ -165,7 +165,7 @@ class _CortexBotT2:
     advanced_construction_bot = "corack"  # Advanced Construction Bot
     duck = "coramph"  # Duck
     sumo = "corcan"  # Sumo
-    commander = "cordecom"  # Commander
+    decoy_commander = "cordecom"  # Decoy Commander: looks like the commander, weaker weapons
     twitcher = "corfast"  # Twitcher
     twitcher_hack = "corhack"  # Twitcher
     arbiter = "corhrk"  # Arbiter
@@ -309,7 +309,7 @@ class _LegionBotT2:
     euclid = "legaradk"  # Euclid
     eidolon = "legaspy"  # Eidolon
     belcher = "legbart"  # Belcher
-    legion_commander = "legdecom"  # Legion Commander
+    decoy_commander = "legdecom"  # Decoy Commander: looks like the commander, weaker weapons
     thanatos = "leghrk"  # Thanatos
     incinerator = "leginc"  # Incinerator
     infestor = "leginfestor"  # Infestor
@@ -496,6 +496,7 @@ class _LegionSeaplane:
 
 
 class _Armada:
+    commander = "armcom"  # Commander (with scenario.commander_death_ends_game, the unit to protect)
     bot = _ArmadaBot
     vehicle = _ArmadaVehicle
     aircraft = _ArmadaAircraft
@@ -505,6 +506,7 @@ class _Armada:
 
 
 class _Cortex:
+    commander = "corcom"  # Commander
     bot = _CortexBot
     vehicle = _CortexVehicle
     aircraft = _CortexAircraft
@@ -514,6 +516,7 @@ class _Cortex:
 
 
 class _Legion:
+    commander = "legcom"  # Commander
     bot = _LegionBot
     vehicle = _LegionVehicle
     aircraft = _LegionAircraft
@@ -526,3 +529,7 @@ class units:
     armada = _Armada
     cortex = _Cortex
     legion = _Legion
+
+
+# The commanders of the factions (not the decoys): ScenarioConfiguration.commander_death_ends_game looks for them.
+COMMANDERS = frozenset({units.armada.commander, units.cortex.commander, units.legion.commander})

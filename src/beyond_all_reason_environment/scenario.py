@@ -12,6 +12,7 @@ import numpy as np
 
 from .installation import DEFAULT_MAP
 from .start_script import FRAMES_PER_SECOND, Side
+from .units import COMMANDERS
 
 # Distance kept from the map border by the default spawn zones (fraction of the map), so no unit starts on the edge.
 SPAWN_MARGIN = 0.02
@@ -87,6 +88,9 @@ class ScenarioConfiguration:
     # Every alliance sees the whole map. The reinforcement learning environment needs it: the engine drops attack
     # orders on units the team does not see.
     full_vision: bool = False
+    # The game ends when an alliance has lost its commanders (units.COMMANDERS, placed with its units): that alliance
+    # loses, whatever it has left. False: an alliance loses when it has no unit left.
+    commander_death_ends_game: bool = False
 
     def __post_init__(self) -> None:
         if len(set(self.allyteams)) < 2:
@@ -95,6 +99,14 @@ class ScenarioConfiguration:
             raise ValueError("map_name must be a map or a non-empty list of maps")
         if len({team.units is None for team in self.teams}) > 1:
             raise ValueError("either every team has placed units, or none (a normal start)")
+        if self.commander_death_ends_game:
+            with_commander = {
+                allyteam
+                for team, allyteam in zip(self.teams, self.allyteams, strict=True)
+                if set(team.units or {}) & COMMANDERS
+            }
+            if with_commander != set(self.allyteams):
+                raise ValueError("commander_death_ends_game needs placed units with a commander in every alliance")
 
     @property
     def allyteams(self) -> list[int]:

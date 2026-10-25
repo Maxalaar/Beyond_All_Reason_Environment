@@ -122,8 +122,9 @@ from .game_extension import extension_game_name
 from .installation import build_bridge_ai
 from .match import RUNS_DIRECTORY, start_engine
 from .reinforcement_learning_environment_configuration import COMMANDS, ReinforcementLearningEnvironmentConfiguration
-from .scenario import spawn_positions
+from .scenario import ScenarioConfiguration, spawn_positions
 from .start_script import FRAMES_PER_SECOND, MatchConfiguration
+from .units import COMMANDERS
 
 CONNECTION_TIMEOUT_SECONDS = 300
 
@@ -467,6 +468,14 @@ def encode_observation(
     return observation
 
 
+def side_defeated(units: list[dict], teams: set[int], scenario: ScenarioConfiguration) -> bool:
+    """True when the units of ``teams`` lost: none left, or, with scenario.commander_death_ends_game, no commander."""
+    side = [u for u in units if u["team"] in teams]
+    if scenario.commander_death_ends_game:
+        return not any(u["unit"] in COMMANDERS for u in side)
+    return not side
+
+
 def team_reward(
     previous: dict,
     current: dict,
@@ -488,16 +497,20 @@ def team_reward(
         )
 
     weights = configuration.rewards
+    scenario = configuration.game.scenario
+    enemy_teams = {u["team"] for u in [*before.values(), *after.values()]} - ally_teams
     enemies_before = sum(u["team"] not in ally_teams for u in before.values())
     enemies_after = sum(u["team"] not in ally_teams for u in after.values())
-    allies_after = sum(u["team"] in ally_teams for u in after.values())
     reward = weights.damage_dealt * health_lost(False) / max(initial_enemy_health, 1e-9)
     reward -= weights.damage_received * health_lost(True) / max(initial_ally_health, 1e-9)
     reward += weights.kill * (enemies_before - enemies_after) / max(initial_enemies, 1)
-    # Both sides wiped out in the same step is a draw: neither victory nor defeat.
-    if enemies_after == 0 and enemies_before > 0 and allies_after > 0:
+    enemies_defeated_before = side_defeated(list(before.values()), enemy_teams, scenario)
+    enemies_defeated = side_defeated(list(after.values()), enemy_teams, scenario)
+    allies_defeated = side_defeated(list(after.values()), ally_teams, scenario)
+    # Both sides defeated in the same step is a draw: neither victory nor defeat.
+    if enemies_defeated and not enemies_defeated_before and not allies_defeated:
         reward += weights.victory
-    elif allies_after == 0 and enemies_after > 0:
+    elif allies_defeated and not enemies_defeated:
         reward += weights.defeat
     return float(reward)
 
@@ -832,6 +845,11 @@ class ReinforcementLearningEnvironment:
             "frames_since_previous_decision": raw.get("frames_since_previous_decision", 0),
             "allies_alive": sum(u["team"] in allies for u in raw["units"]),
             "enemies_alive": sum(u["team"] not in allies for u in raw["units"]),
+            # Who lost (scenario.commander_death_ends_game: a side can lose with units left); both: a draw.
+            "allies_defeated": side_defeated(raw["units"], allies, self.configuration.game.scenario),
+            "enemies_defeated": side_defeated(
+                raw["units"], set(range(len(self._allyteams))) - allies, self.configuration.game.scenario
+            ),
             "late_actions": raw["late_actions"],
             "maximum_lead_frames": raw.get("maximum_lead", 0),
         }
@@ -901,8 +919,10 @@ class ReinforcementLearningEnvironment:
         }
         self._previous = raw
         alive_units = {u["id"] for u in raw["units"]}
-        # The episode ends when one alliance at most still has units.
-        episode_over = len({self._allyteams[u["team"]] for u in raw["units"]}) <= 1
+        # The episode ends when one alliance at most is not defeated (no unit left, or no commander).
+        scenario = self.configuration.game.scenario
+        alliances = set(self._allyteams)
+        episode_over = sum(not side_defeated(raw["units"], self._teams_of(a), scenario) for a in alliances) <= 1
         time_over = raw["episode_frame"] >= self.configuration.game.scenario.maximum_game_frames
 
         observations = self._observations(raw)

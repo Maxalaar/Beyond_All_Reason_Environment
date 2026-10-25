@@ -97,7 +97,8 @@ def game_mod_options(game: GameConfiguration, seed: int) -> dict[str, str]:
     """Mod options that make the game extension's gadget set the game up without Python.
 
     Placed units: spawn positions are drawn from ``seed``, so a game is reproducible, and the game ends when every
-    unit of a side is destroyed (deathmode killall); a normal start keeps the game's own end condition. Scripted
+    unit of a side is destroyed (deathmode killall), or its commanders with scenario.commander_death_ends_game
+    (deathmode com); a normal start keeps the game's own end condition. Scripted
     controllers and full vision apply in both cases.
     """
     scenario = game.scenario
@@ -111,5 +112,5 @@ def game_mod_options(game: GameConfiguration, seed: int) -> dict[str, str]:
     states = unit_states(game, (DEFAULT_STATE, DEFAULT_STATE))
     spawns_text = "/".join(f"{spawn['team']},{spawn['unit']},{spawn['x']:.6f},{spawn['z']:.6f}" for spawn in spawns)
     options["reinforcement_learning_scenario"] = f"{spawns_text}|{','.join(map(str, states))}"
-    options["deathmode"] = "killall"
+    options["deathmode"] = "com" if scenario.commander_death_ends_game else "killall"
     return options | no_commander_mod_options()

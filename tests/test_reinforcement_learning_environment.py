@@ -27,6 +27,7 @@ from beyond_all_reason_environment.reinforcement_learning_environment import (
     encode_observation,
     merge_commands,
     relative_allyteams,
+    side_defeated,
     state_feature_names,
     team_reward,
     visibility,
@@ -37,6 +38,7 @@ from beyond_all_reason_environment.reinforcement_learning_environment_configurat
     ActionConfiguration,
     ObservationConfiguration,
     ReinforcementLearningEnvironmentConfiguration,
+    RewardWeights,
 )
 from beyond_all_reason_environment.scenario import (
     SPAWN_MARGIN,
@@ -47,6 +49,7 @@ from beyond_all_reason_environment.scenario import (
 )
 from beyond_all_reason_environment.scenarios import (
     combined_arms_arena,
+    combined_arms_commander_arena,
     five_versus_five,
     five_versus_one_to_five_arena,
     one_versus_one,
@@ -378,6 +381,35 @@ def test_chassis_features_do_not_depend_on_the_unit_types_of_the_scenario():
     combined_arms = chassis_feature_names(environment_configuration(combined_arms_arena))
     assert pawns_only == combined_arms
     assert not any(name.startswith("type_") for name in pawns_only)
+
+
+def test_the_side_that_loses_its_commander_loses_whatever_it_has_left():
+    terminal_only = RewardWeights(damage_dealt=0.0, damage_received=0.0, kill=0.0)
+    configuration = environment_configuration(combined_arms_commander_arena, [Agent(), Agent()], rewards=terminal_only)
+    commander, enemy_commander = unit(1, 0, 0.1, 0.5, health=3700.0), unit(2, 1, 0.9, 0.5, health=3700.0)
+    commander["unit"] = enemy_commander["unit"] = "armcom"
+    pawns = [unit(3, 0, 0.2, 0.5), unit(4, 1, 0.8, 0.5)]
+    before = raw_observation([commander, enemy_commander, *pawns])
+    after = raw_observation([commander, *pawns])  # the enemy commander died, an enemy Pawn is left
+    victory = team_reward(before, after, 4070.0, 4070.0, 2, configuration, ally_teams={0})
+    defeat = team_reward(before, after, 4070.0, 4070.0, 2, configuration, ally_teams={1})
+    assert (victory, defeat) == (configuration.rewards.victory, configuration.rewards.defeat)
+    scenario = configuration.game.scenario
+    assert side_defeated(after["units"], {1}, scenario) and not side_defeated(after["units"], {0}, scenario)
+    # Without the option, a side with units left has not lost.
+    assert not side_defeated(after["units"], {1}, replace(scenario, commander_death_ends_game=False))
+
+
+def test_commander_death_ends_game_needs_a_commander_in_every_alliance():
+    with pytest.raises(ValueError, match="commander in every alliance"):
+        replace(five_versus_five, commander_death_ends_game=True)
+
+
+def test_the_commander_arena_spawns_each_side_anywhere_in_its_half():
+    scenario = combined_arms_commander_arena
+    west, east = scenario.spawn_zone(0), scenario.spawn_zone(1)
+    assert west.x_maximum == pytest.approx(0.5) and east.x_minimum == pytest.approx(0.5)
+    assert west.z_maximum - west.z_minimum > 0.9
 
 
 def test_mobile_and_building_units_are_separated():
