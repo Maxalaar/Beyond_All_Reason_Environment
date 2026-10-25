@@ -9,6 +9,7 @@ from .armada_versus_cortex import armada_versus_cortex
 from .armada_versus_cortex_battle import armada_versus_cortex_battle
 from .combined_arms_arena import combined_arms_arena
 from .combined_arms_commander_arena import combined_arms_commander_arena
+from .combined_arms_commander_arena_rear_spawn import combined_arms_commander_arena_rear_spawn
 from .combined_arms_symmetric_arena import combined_arms_symmetric_arena
 from .five_versus_five import five_versus_five
 from .five_versus_five_arena import five_versus_five_arena
@@ -20,6 +21,7 @@ __all__ = [
     "armada_versus_cortex_battle",
     "combined_arms_arena",
     "combined_arms_commander_arena",
+    "combined_arms_commander_arena_rear_spawn",
     "combined_arms_symmetric_arena",
     "five_versus_five",
     "five_versus_five_arena",
